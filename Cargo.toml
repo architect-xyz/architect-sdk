@@ -1,0 +1,46 @@
+[package]
+authors = ["Architect Financial Technologies LLC"]
+description = "Architect.xyz trading platform SDK"
+documentation = "https://docs.rs/does-not-exist"
+homepage = "https://www.architect.xyz"
+license = "AGPL-3.0-only"
+name = "demon-sdk"
+version = "6.6.6"
+edition = "2021"
+keywords = ["crypto", "hft", "trading", "finance"]
+categories = ["finance", "cryptography::cryptocurrencies"]
+
+[dependencies]
+anyhow = { version = "1", features = ["backtrace"] }
+api = { package = "demon-api", version = "6.6.6", path = "../api" }
+arcstr = { version = "1", features = ["serde"] }
+base64 = "0.21"
+bytes = "1"
+chrono = { version = "^0.4.24", features = ["serde"] }
+compact_str = { version = "0.7.0", features = ["serde"] }
+derive = { package = "demon_derive", version = "6.6.6", path = "../derive" }
+enumflags2 = { version = "^0.7.5", features = ["serde"] }
+futures = "0.3"
+futures-util = "0.3"
+fxhash = "0.2"
+hmac = "0.12"
+log = "0.4.20"
+netidx = { version = "0.26.0" }
+netidx-core = { version = "0.26.0" }
+netidx-derive = { version = "0.22.0" }
+once_cell = "1"
+parking_lot = { version = "0.12.1", features = ["arc_lock"] }
+paste = "1"
+portable-atomic = "1"
+rand = "0.8"
+rust_decimal = { version = "1", features = ["maths", "serde"] }
+rust_decimal_macros = "1"
+#schemars = { version = "1.0.0", package = "architect-schemars", path = "../schemars/schemars", features = ["chrono", "bytes", "smallvec", "uuid1", "enumflags2", "rust_decimal", "netidx-core"] }
+schemars = { version = "1.0.0", package = "architect-schemars", features = ["chrono", "bytes", "smallvec", "uuid1", "enumflags2", "rust_decimal", "netidx-core"] }
+serde = { version = "1", features = ["derive"] }
+serde_derive = "1"
+serde_json = "1"
+sha2 = "0.10"
+time = { version = "0.3.20", features = ["serde"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "io-std", "io-util"] }
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
