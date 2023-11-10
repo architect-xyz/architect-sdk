@@ -12,7 +12,9 @@ use std::sync::Arc;
 mod allocator;
 pub mod client;
 mod hcstatic;
-// pub mod txn;
+pub mod txn;
+
+pub use txn::Txn;
 
 hcstatic!(Venue, api::symbology::Venue, 64);
 hcstatic!(Route, api::symbology::Route, 64);

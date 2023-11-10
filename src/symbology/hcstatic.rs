@@ -14,7 +14,7 @@
 //! process-global memory pools.
 
 use super::allocator::StaticBumpAllocator;
-use anyhow::{bail, Result};
+use anyhow::Result;
 use api::{symbology::Symbolic, Str};
 use arc_swap::ArcSwap;
 use immutable_chunkmap::map::MapL as Map;
@@ -36,34 +36,20 @@ pub trait Hcstatic<T: Symbolic, const SLAB_SIZE: usize>:
     /// Direct constructor
     fn from_pointee(pointee: &'static T) -> Self;
 
-    fn new<Builder>(
+    fn insert(
         by_name: &mut Map<Str, Self>,
         by_id: &mut Map<T::Id, Self>,
-        s: &str,
+        inner: T,
         validate: bool,
-        new: Builder,
-    ) -> Result<Self>
-    where
-        Builder: Fn(T::Id, Str) -> T,
-    {
-        match by_name.get(s) {
-            Some(t) => Ok(*t),
-            None => {
-                if validate {
-                    T::validate_name(s)?;
-                }
-                let name = Str::try_from(s)?;
-                let id = T::Id::from(name);
-                let inner = Self::pool().lock().insert(new(id, name));
-                let t = Self::from_pointee(inner);
-                if by_id.get(&inner.id()).is_some() {
-                    bail!("hell hath frozen over, there is a sha1 conflict")
-                }
-                by_name.insert_cow(inner.name(), t);
-                by_id.insert_cow(inner.id(), t);
-                Ok(t)
-            }
+    ) -> Result<Self> {
+        if validate {
+            inner.validate()?;
         }
+        let inner = Self::pool().lock().insert(inner);
+        let t = Self::from_pointee(inner);
+        by_name.insert_cow(inner.name(), t);
+        by_id.insert_cow(inner.id(), t);
+        Ok(t)
     }
 
     fn remove(self, by_name: &mut Map<Str, Self>, by_id: &mut Map<T::Id, Self>) {

@@ -1,23 +1,16 @@
+use super::*;
 use anyhow::{anyhow, bail, Result};
 use api::{
+    pool,
     symbology::{MarketId, ProductId, RouteId, VenueId},
     Str,
 };
-use bytes::{Buf, Bytes, BytesMut};
-use fxhash::{FxHashMap, FxHashSet};
+use bytes::{Buf, BytesMut};
 use immutable_chunkmap::map::MapL as Map;
-use log::{debug, warn};
-use netidx::{
-    pack::{Pack, PackError},
-    pool::Pooled,
-};
+use log::warn;
+use netidx::pack::Pack;
 use parking_lot::{Mutex, MutexGuard};
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
-use std::{
-    borrow::Borrow, cell::RefCell, collections::BTreeMap, fmt, ops::Deref, sync::Arc,
-};
-use uuid::Uuid;
+use std::{cell::RefCell, sync::Arc};
 
 static TXN_LOCK: Mutex<()> = Mutex::new(());
 
@@ -61,14 +54,10 @@ impl Txn {
         VENUE_BY_ID.store(Arc::clone(venue_by_id));
         ROUTE_BY_NAME.store(Arc::clone(route_by_name));
         ROUTE_BY_ID.store(Arc::clone(route_by_id));
-        QUOTE_SYMBOL_BY_NAME.store(Arc::clone(quote_symbol_by_name));
-        QUOTE_SYMBOL_BY_ID.store(Arc::clone(quote_symbol_by_id));
-        TRADING_SYMBOL_BY_NAME.store(Arc::clone(trading_symbol_by_name));
-        TRADING_SYMBOL_BY_ID.store(Arc::clone(trading_symbol_by_id));
         PRODUCT_BY_NAME.store(Arc::clone(product_by_name));
         PRODUCT_BY_ID.store(Arc::clone(product_by_id));
-        TRADABLE_PRODUCT.store(Arc::clone(tradable_product_by_name));
-        TRADABLE_PRODUCT_BY_ID.store(Arc::clone(tradable_product_by_id));
+        MARKET_BY_NAME.store(Arc::clone(market_by_name));
+        MARKET_BY_ID.store(Arc::clone(market_by_id));
     }
 
     /// Add the symbology in the transaction to the global symbology,
@@ -81,14 +70,10 @@ impl Txn {
             venue_by_id,
             route_by_name,
             route_by_id,
-            quote_symbol_by_name,
-            quote_symbol_by_id,
-            trading_symbol_by_name,
-            trading_symbol_by_id,
             product_by_name,
             product_by_id,
-            tradable_product_by_name,
-            tradable_product_by_id,
+            market_by_name,
+            market_by_id,
         } = &self;
         VENUE_BY_NAME.store(Arc::new(
             (**VENUE_BY_NAME.load()).union(venue_by_name, |_, _, v| Some(*v)),
@@ -102,34 +87,17 @@ impl Txn {
         ROUTE_BY_ID.store(Arc::new(
             (**ROUTE_BY_ID.load()).union(route_by_id, |_, _, v| Some(*v)),
         ));
-        QUOTE_SYMBOL_BY_NAME.store(Arc::new(
-            (**QUOTE_SYMBOL_BY_NAME.load())
-                .union(quote_symbol_by_name, |_, _, v| Some(*v)),
-        ));
-        QUOTE_SYMBOL_BY_ID.store(Arc::new(
-            (**QUOTE_SYMBOL_BY_ID.load()).union(quote_symbol_by_id, |_, _, v| Some(*v)),
-        ));
-        TRADING_SYMBOL_BY_NAME.store(Arc::new(
-            (**TRADING_SYMBOL_BY_NAME.load())
-                .union(trading_symbol_by_name, |_, _, v| Some(*v)),
-        ));
-        TRADING_SYMBOL_BY_ID.store(Arc::new(
-            (**TRADING_SYMBOL_BY_ID.load())
-                .union(trading_symbol_by_id, |_, _, v| Some(*v)),
-        ));
         PRODUCT_BY_NAME.store(Arc::new(
             (**PRODUCT_BY_NAME.load()).union(product_by_name, |_, _, v| Some(*v)),
         ));
         PRODUCT_BY_ID.store(Arc::new(
             (**PRODUCT_BY_ID.load()).union(product_by_id, |_, _, v| Some(*v)),
         ));
-        TRADABLE_PRODUCT.store(Arc::new(
-            (**TRADABLE_PRODUCT.load())
-                .union(tradable_product_by_name, |_, _, v| Some(*v)),
+        MARKET_BY_NAME.store(Arc::new(
+            (**MARKET_BY_NAME.load()).union(market_by_name, |_, _, v| Some(*v)),
         ));
-        TRADABLE_PRODUCT_BY_ID.store(Arc::new(
-            (**TRADABLE_PRODUCT_BY_ID.load())
-                .union(tradable_product_by_id, |_, _, v| Some(*v)),
+        MARKET_BY_ID.store(Arc::new(
+            (**MARKET_BY_ID.load()).union(market_by_id, |_, _, v| Some(*v)),
         ));
     }
 
@@ -141,14 +109,10 @@ impl Txn {
             venue_by_id: VENUE_BY_ID.load_full(),
             route_by_name: ROUTE_BY_NAME.load_full(),
             route_by_id: ROUTE_BY_ID.load_full(),
-            quote_symbol_by_name: QUOTE_SYMBOL_BY_NAME.load_full(),
-            quote_symbol_by_id: QUOTE_SYMBOL_BY_ID.load_full(),
-            trading_symbol_by_name: TRADING_SYMBOL_BY_NAME.load_full(),
-            trading_symbol_by_id: TRADING_SYMBOL_BY_ID.load_full(),
             product_by_name: PRODUCT_BY_NAME.load_full(),
             product_by_id: PRODUCT_BY_ID.load_full(),
-            tradable_product_by_name: TRADABLE_PRODUCT.load_full(),
-            tradable_product_by_id: TRADABLE_PRODUCT_BY_ID.load_full(),
+            market_by_name: MARKET_BY_NAME.load_full(),
+            market_by_id: MARKET_BY_ID.load_full(),
         }
     }
 
@@ -175,14 +139,10 @@ impl Txn {
             venue_by_id: Arc::new(Map::new()),
             route_by_name: Arc::new(Map::new()),
             route_by_id: Arc::new(Map::new()),
-            quote_symbol_by_name: Arc::new(Map::new()),
-            quote_symbol_by_id: Arc::new(Map::new()),
-            trading_symbol_by_name: Arc::new(Map::new()),
-            trading_symbol_by_id: Arc::new(Map::new()),
             product_by_name: Arc::new(Map::new()),
             product_by_id: Arc::new(Map::new()),
-            tradable_product_by_name: Arc::new(Map::new()),
-            tradable_product_by_id: Arc::new(Map::new()),
+            market_by_name: Arc::new(Map::new()),
+            market_by_id: Arc::new(Map::new()),
         }
     }
 
@@ -197,5 +157,157 @@ impl Txn {
     /// Same as empty, but doesn't wait if it can't get the lock.
     pub fn try_empty() -> Option<Self> {
         TXN_LOCK.try_lock().map(Self::empty_inner)
+    }
+
+    pub fn add_route(&mut self, route: api::symbology::Route) -> Result<Route> {
+        Route::insert(
+            Arc::make_mut(&mut self.route_by_name),
+            Arc::make_mut(&mut self.route_by_id),
+            route,
+            true,
+        )
+    }
+
+    pub fn remove_route(&mut self, route: &RouteId) -> Result<()> {
+        let route = self
+            .route_by_id
+            .get(route)
+            .copied()
+            .ok_or_else(|| anyhow!("no such route"))?;
+        Ok(route.remove(
+            Arc::make_mut(&mut self.route_by_name),
+            Arc::make_mut(&mut self.route_by_id),
+        ))
+    }
+
+    pub fn add_venue(&mut self, venue: api::symbology::Venue) -> Result<Venue> {
+        Venue::insert(
+            Arc::make_mut(&mut self.venue_by_name),
+            Arc::make_mut(&mut self.venue_by_id),
+            venue,
+            true,
+        )
+    }
+
+    pub fn remove_venue(&mut self, venue: &VenueId) -> Result<()> {
+        let venue = self
+            .venue_by_id
+            .get(venue)
+            .copied()
+            .ok_or_else(|| anyhow!("no such venue"))?;
+        Ok(venue.remove(
+            Arc::make_mut(&mut self.venue_by_name),
+            Arc::make_mut(&mut self.venue_by_id),
+        ))
+    }
+
+    pub fn add_product(&mut self, product: api::symbology::Product) -> Result<Product> {
+        Product::insert(
+            Arc::make_mut(&mut self.product_by_name),
+            Arc::make_mut(&mut self.product_by_id),
+            product,
+            true,
+        )
+    }
+
+    pub fn remove_product(&mut self, product: &ProductId) -> Result<()> {
+        let product = self
+            .product_by_id
+            .get(product)
+            .copied()
+            .ok_or_else(|| anyhow!("no such product"))?;
+        Ok(product.remove(
+            Arc::make_mut(&mut self.product_by_name),
+            Arc::make_mut(&mut self.product_by_id),
+        ))
+    }
+
+    pub fn add_market(&mut self, market: api::symbology::Market) -> Result<Market> {
+        Market::insert(
+            Arc::make_mut(&mut self.market_by_name),
+            Arc::make_mut(&mut self.market_by_id),
+            market,
+            true,
+        )
+    }
+
+    pub fn remove_market(&mut self, market: &MarketId) -> Result<()> {
+        let market = self
+            .market_by_id
+            .get(market)
+            .copied()
+            .ok_or_else(|| anyhow!("no such market"))?;
+        Ok(market.remove(
+            Arc::make_mut(&mut self.market_by_name),
+            Arc::make_mut(&mut self.market_by_id),
+        ))
+    }
+
+    /// Updates are idempotent; symbology update replays should be harmless
+    pub fn apply(&mut self, up: &api::symbology::SymbologyUpdateKind) -> Result<()> {
+        use api::symbology::SymbologyUpdateKind::{self, *};
+        match up {
+            AddRoute(route) => self.add_route(route.clone()).map(|_| ()),
+            RemoveRoute(route) => self.remove_route(route),
+            AddVenue(venue) => self.add_venue(venue.clone()).map(|_| ()),
+            RemoveVenue(venue) => self.remove_venue(venue),
+            AddProduct(product) => self.add_product(product.clone()).map(|_| ()),
+            RemoveProduct(product) => self.remove_product(product),
+            AddMarket(market) => self.add_market(market.clone()).map(|_| ()),
+            RemoveMarket(market) => self.remove_market(market),
+            Snapshot { original_length, compressed } => {
+                thread_local! {
+                    static BUF: RefCell<BytesMut> = RefCell::new(BytesMut::new());
+                }
+                pool!(pool_updates, Vec<SymbologyUpdateKind>, 10, 100_000);
+                let original_length = *original_length;
+                if original_length > compressed.len() << 6
+                    || original_length < compressed.len()
+                {
+                    bail!("suspicious looking original length {}", original_length)
+                }
+                let mut updates = BUF.with(|buf| {
+                    let mut buf = buf.borrow_mut();
+                    buf.resize(original_length, 0u8);
+                    let len =
+                        zstd::bulk::decompress_to_buffer(&compressed[..], &mut buf[..])?;
+                    if len != original_length {
+                        bail!(
+                            "unexpected decompressed length {} expected {}",
+                            len,
+                            original_length
+                        )
+                    }
+                    let mut updates = pool_updates().take();
+                    loop {
+                        let rem = buf.remaining();
+                        if rem == 0 {
+                            break Ok::<_, anyhow::Error>(updates)
+                        }
+                        match Pack::decode(&mut *buf) {
+                            Ok(up) => updates.push(up),
+                            Err(e) => {
+                                // make sure len_wrapped_decode skipped the bad message
+                                if buf.remaining() < rem {
+                                    warn!("failed to unpack symbology update {:?}, skipping", e);
+                                } else {
+                                    break Err(e.into())
+                                }
+                            }
+                        }
+                    }
+                })?;
+                for up in updates.drain(..) {
+                    if let Err(e) = self.apply(&up) {
+                        warn!(
+                            "could not apply symbology update from snapshot {:?} {:?}",
+                            up, e
+                        )
+                    }
+                }
+                Ok(())
+            }
+            Unknown => Ok(()),
+        }
     }
 }
