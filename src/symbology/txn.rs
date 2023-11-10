@@ -2,13 +2,15 @@ use super::*;
 use anyhow::{anyhow, bail, Result};
 use api::{
     pool,
-    symbology::{MarketId, ProductId, RouteId, VenueId},
+    symbology::{MarketId, ProductId, RouteId, SymbologyUpdateKind, VenueId},
     Str,
 };
-use bytes::{Buf, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
+use fxhash::FxHashSet;
 use immutable_chunkmap::map::MapL as Map;
 use log::warn;
-use netidx::pack::Pack;
+use md5::{Digest, Md5};
+use netidx::{pack::Pack, pool::Pooled};
 use parking_lot::{Mutex, MutexGuard};
 use std::{cell::RefCell, sync::Arc};
 
@@ -244,8 +246,8 @@ impl Txn {
     }
 
     /// Updates are idempotent; symbology update replays should be harmless
-    pub fn apply(&mut self, up: &api::symbology::SymbologyUpdateKind) -> Result<()> {
-        use api::symbology::SymbologyUpdateKind::{self, *};
+    pub fn apply(&mut self, up: &SymbologyUpdateKind) -> Result<()> {
+        use api::symbology::SymbologyUpdateKind::*;
         match up {
             AddRoute(route) => self.add_route(route.clone()).map(|_| ()),
             RemoveRoute(route) => self.remove_route(route),
@@ -309,5 +311,82 @@ impl Txn {
             }
             Unknown => Ok(()),
         }
+    }
+
+    /// dump the current symbology as of Txn to a series of symbology updates
+    pub fn dump(&self) -> Pooled<Vec<SymbologyUpdateKind>> {
+        pool!(pool_pset, FxHashSet<Product>, 2, 1_000_000);
+        pool!(pool_update, Vec<SymbologyUpdateKind>, 2, 1_000_000);
+        let mut updates = pool_update().take();
+        for (_, venue) in &*self.venue_by_id {
+            updates.push(SymbologyUpdateKind::AddVenue((**venue).clone()));
+        }
+        for (_, route) in &*self.route_by_id {
+            updates.push(SymbologyUpdateKind::AddRoute((**route).clone()));
+        }
+        for (_, product) in &*self.product_by_id {
+            updates.push(SymbologyUpdateKind::AddProduct((**product).clone()));
+        }
+        for (_, market) in &*self.market_by_id {
+            updates.push(SymbologyUpdateKind::AddMarket((**market).clone()));
+        }
+        updates
+    }
+
+    /// dump the symbology db in a squashed form, return the md5 sum and
+    /// the squashed update. The squashed update is compressed with zstd.
+    pub fn dump_squashed(&self) -> Result<(Bytes, SymbologyUpdateKind)> {
+        thread_local! {
+            static BUF: RefCell<BytesMut> = RefCell::new(BytesMut::new());
+            static COMP: RefCell<Result<zstd::bulk::Compressor<'static>>> = RefCell::new({
+                match zstd::bulk::Compressor::new(16) {
+                    Err(e) => Err(e.into()),
+                    Ok(mut comp) => match comp.multithread(num_cpus::get() as u32) {
+                        Err(e) => Err(e.into()),
+                        Ok(()) => Ok(comp)
+                    }
+                }
+            });
+        }
+        let updates = self.dump();
+        BUF.with(|buf| {
+            let mut buf = buf.borrow_mut();
+            buf.clear();
+            for up in &*updates {
+                Pack::encode(up, &mut *buf)?;
+            }
+            let original = buf.split().freeze();
+            buf.resize(original.len(), 0u8);
+            let clen = COMP.with(|comp| {
+                let mut comp = comp.borrow_mut();
+                let comp = comp.as_mut().map_err(|e| anyhow!("{:?}", e))?;
+                let len = comp.compress_to_buffer(&original[..], &mut buf[..])?;
+                Ok::<_, anyhow::Error>(len)
+            })?;
+            if clen > u32::MAX as usize {
+                bail!("snapshot is too big")
+            }
+            buf.resize(clen, 0u8);
+            let compressed = buf.split().freeze();
+            // TODO: not sure what the point of the commented out stuff was
+            // it even seems wrong?
+            // I guess it was to give a stable thing to md5,
+            // but self.dump() is already deterministically ordered pretty sure
+            // updates.sort();
+            // for up in &*updates {
+            //     Pack::encode(up, &mut *buf)?;
+            // }
+            let mut md5 = Md5::default();
+            md5.update(&*buf);
+            let md5_hash = md5.finalize();
+            buf.clear();
+            buf.extend_from_slice(&md5_hash);
+            let md5 = buf.split().freeze();
+            let up = SymbologyUpdateKind::Snapshot {
+                original_length: original.len(),
+                compressed,
+            };
+            Ok((md5, up))
+        })
     }
 }
