@@ -14,6 +14,7 @@ categories = ["finance", "cryptography::cryptocurrencies"]
 anyhow = { version = "1", features = ["backtrace"] }
 api = { package = "demon-api", version = "6.6.6", path = "../api" }
 arcstr = { version = "1", features = ["serde"] }
+arc-swap = "1"
 base64 = "0.21"
 bytes = "1"
 chrono = { version = "^0.4.24", features = ["serde"] }
@@ -24,6 +25,7 @@ futures = "0.3"
 futures-util = "0.3"
 fxhash = "0.2"
 hmac = "0.12"
+immutable-chunkmap = { version = "2.0.0", features = ["serde"] }
 log = "0.4.20"
 netidx = { version = "0.26.0" }
 netidx-core = { version = "0.26.0" }
