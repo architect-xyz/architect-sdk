@@ -26,6 +26,7 @@ futures-util = "0.3"
 fxhash = "0.2"
 hmac = "0.12"
 immutable-chunkmap = { version = "2.0.0", features = ["serde"] }
+itertools = "0.10"
 log = "0.4.20"
 md-5 = "0.10"
 netidx = { version = "0.26.0" }
