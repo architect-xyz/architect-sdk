@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 mod allocator;
 pub mod client;
-mod hcstatic;
+pub mod hcstatic;
 pub mod txn;
 
 pub use txn::Txn;

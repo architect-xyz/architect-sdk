@@ -3,8 +3,8 @@
 //! symbology client
 
 use super::Txn;
-use anyhow::{bail, Result};
-use api::symbology::SymbologyUpdate;
+use anyhow::{anyhow, bail, Result};
+use api::symbology::{SymbologyUpdate, SymbologyUpdateKind};
 use bytes::Buf;
 use futures::{channel::mpsc, prelude::*};
 use log::{debug, error, warn};
@@ -152,11 +152,30 @@ async fn run(
 pub struct Client {
     task: task::JoinHandle<()>,
     status: StatusCtx,
+    write_rpcs: Option<WriteRpcs>,
 }
 
 impl Drop for Client {
     fn drop(&mut self) {
         self.task.abort()
+    }
+}
+
+fn checked_result(v: Value) -> Result<()> {
+    match v {
+        Value::Ok => Ok(()),
+        Value::Error(e) => Err(anyhow!(e)),
+        _ => bail!("unexpected response"),
+    }
+}
+
+macro_rules! checked_call {
+    ($wr:expr, $proc:ident, $($name:ident: $arg:expr),*) => {
+        if let Some(wr) = $wr {
+            checked_result(wr.$proc.call([$((stringify!($name), $arg.try_into()?)),*]).await?)
+        } else {
+            Err(anyhow!("not in write mode"))
+        }
     }
 }
 
@@ -168,14 +187,17 @@ impl Client {
     ///
     /// - if updates is None, then update the in process symbology
     /// database in the background.
-    pub fn start(
+    pub fn new(
         subscriber: Subscriber,
         base_path: Path,
         updates: Option<mpsc::UnboundedSender<SymbologyUpdate>>,
+        write: bool,
     ) -> Self {
         let status = StatusCtx::new();
         let task = {
             let status = status.clone();
+            let subscriber = subscriber.clone();
+            let base_path = base_path.clone();
             task::spawn(async move {
                 loop {
                     if let Err(e) = run(
@@ -193,11 +215,15 @@ impl Client {
                 }
             })
         };
-        Client { task, status }
+        let write_rpcs = if write {
+            Some(WriteRpcs::new(&subscriber, base_path).unwrap())
+        } else {
+            None
+        };
+        Client { task, status, write_rpcs }
     }
 
-    /// Return the current status of the symbology and a channel of
-    /// status changes
+    /// Return the current status of the symbology and a channel of status changes
     pub fn status(&self) -> (Status, broadcast::Receiver<Status>) {
         self.status.subscribe()
     }
@@ -218,5 +244,89 @@ impl Client {
                 },
             }
         }
+    }
+
+    pub async fn squash(&self) -> Result<()> {
+        if let Some(wr) = &self.write_rpcs {
+            checked_result(wr.squash.call::<_, &str>([]).await?)
+        } else {
+            Err(anyhow!("not in write mode"))
+        }
+    }
+
+    pub async fn apply_updates(&self, up: Vec<SymbologyUpdateKind>) -> Result<()> {
+        checked_call!(&self.write_rpcs, apply_updates, updates: up)
+    }
+
+    pub async fn add_venue(&self, venue: api::symbology::Venue) -> Result<()> {
+        checked_call!(&self.write_rpcs, add_venue, venue: venue)
+    }
+
+    pub async fn add_route(&self, route: api::symbology::Route) -> Result<()> {
+        checked_call!(&self.write_rpcs, add_route, route: route)
+    }
+
+    pub async fn add_product(&self, product: api::symbology::Product) -> Result<()> {
+        checked_call!(&self.write_rpcs, add_product, product: product)
+    }
+
+    pub async fn add_market(&self, market: api::symbology::Market) -> Result<()> {
+        checked_call!(&self.write_rpcs, add_market, market: market)
+    }
+
+    pub async fn remove_venue(&self, id: api::symbology::VenueId) -> Result<()> {
+        checked_call!(&self.write_rpcs, remove_venue, id: id)
+    }
+
+    pub async fn remove_route(&self, id: api::symbology::RouteId) -> Result<()> {
+        checked_call!(&self.write_rpcs, remove_route, id: id)
+    }
+
+    pub async fn remove_product(&self, id: api::symbology::ProductId) -> Result<()> {
+        checked_call!(&self.write_rpcs, remove_product, id: id)
+    }
+
+    pub async fn remove_market(&self, id: api::symbology::MarketId) -> Result<()> {
+        checked_call!(&self.write_rpcs, remove_market, id: id)
+    }
+}
+
+struct WriteRpcs {
+    squash: Proc,
+    apply_updates: Proc,
+    add_venue: Proc,
+    add_route: Proc,
+    add_product: Proc,
+    add_market: Proc,
+    remove_venue: Proc,
+    remove_route: Proc,
+    remove_product: Proc,
+    remove_market: Proc,
+}
+
+impl WriteRpcs {
+    pub fn new(subscriber: &Subscriber, base: Path) -> Result<Self> {
+        let squash = Proc::new(subscriber, base.append("squash"))?;
+        let apply_updates = Proc::new(subscriber, base.append("apply-updates"))?;
+        let add_venue = Proc::new(subscriber, base.append("add-venue"))?;
+        let add_route = Proc::new(subscriber, base.append("add-route"))?;
+        let add_product = Proc::new(subscriber, base.append("add-product"))?;
+        let add_market = Proc::new(subscriber, base.append("add-market"))?;
+        let remove_venue = Proc::new(subscriber, base.append("remove-venue"))?;
+        let remove_route = Proc::new(subscriber, base.append("remove-route"))?;
+        let remove_product = Proc::new(subscriber, base.append("remove-product"))?;
+        let remove_market = Proc::new(subscriber, base.append("remove-market"))?;
+        Ok(WriteRpcs {
+            squash,
+            apply_updates,
+            add_venue,
+            add_route,
+            add_product,
+            add_market,
+            remove_venue,
+            remove_route,
+            remove_product,
+            remove_market,
+        })
     }
 }
