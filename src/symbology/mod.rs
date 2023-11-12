@@ -45,14 +45,31 @@ impl Product {
 }
 
 impl Market {
-    pub fn new(
-        name: &str,
-        kind: api::symbology::MarketKind,
+    pub fn exchange(
+        base: &api::symbology::Product,
+        quote: &api::symbology::Product,
         venue: &api::symbology::Venue,
         route: &api::symbology::Route,
         exchange_symbol: &str,
         extra_info: api::symbology::MarketInfo,
     ) -> Result<api::symbology::Market> {
-        api::symbology::Market::new(name, kind, venue, route, exchange_symbol, extra_info)
+        api::symbology::Market::exchange(
+            base,
+            quote,
+            venue,
+            route,
+            exchange_symbol,
+            extra_info,
+        )
+    }
+
+    pub fn pool(
+        products: &[api::symbology::Product],
+        venue: &api::symbology::Venue,
+        route: &api::symbology::Route,
+        exchange_symbol: &str,
+        extra_info: api::symbology::MarketInfo,
+    ) -> Result<api::symbology::Market> {
+        api::symbology::Market::pool(products, venue, route, exchange_symbol, extra_info)
     }
 }
