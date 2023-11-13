@@ -63,7 +63,20 @@ impl NetidxQfPaths for Market {
     }
 
     fn path_by_name(&self, base: &Path) -> Path {
-        base.append("by-name").append(&self.name)
+        let path = base.append("by-name");
+        match &self.kind {
+            MarketKind::Exchange { base, quote } => {
+                path.append(&base.name).append(&quote.name)
+            }
+            MarketKind::Pool(pool) => {
+                let mut path = path;
+                for p in pool {
+                    path = path.append(&p.name);
+                }
+                path
+            }
+            MarketKind::Unknown => path.append("UNKNOWN"),
+        }
     }
 
     fn unalias_id(&self) -> Option<String> {
