@@ -13,19 +13,46 @@
 //! functionality for working with symbology.  The macro will also create the necessary
 //! process-global memory pools.
 
-use super::allocator::StaticBumpAllocator;
+use super::allocator::{AllocatorSnapshot, StaticBumpAllocator};
 use anyhow::Result;
 use api::{symbology::Symbolic, Str};
 use arc_swap::ArcSwap;
 use immutable_chunkmap::map::MapL as Map;
 use parking_lot::Mutex;
-use std::{ops::Deref, sync::Arc};
+use portable_atomic::Ordering;
+use std::{
+    ops::Deref,
+    sync::{atomic::AtomicUsize, Arc},
+};
 
 pub trait Hcstatic<T: Symbolic, const SLAB_SIZE: usize>:
     Clone + Copy + Deref<Target = T> + 'static
 {
     /// Returns a reference to the global pool of T's
-    fn pool() -> &'static Mutex<StaticBumpAllocator<T, SLAB_SIZE>>;
+    fn allocator() -> &'static Mutex<StaticBumpAllocator<T, SLAB_SIZE>>;
+
+    fn allocator_counter() -> &'static AtomicUsize;
+
+    /// Returns a snapshot of the current global pool of T's
+    fn allocator_snapshot<F: FnMut(Self)>(
+        prev: Option<AllocatorSnapshot<T>>,
+        mut new: F,
+    ) -> AllocatorSnapshot<T> {
+        match prev {
+            None => {
+                Self::allocator().lock().snapshot(prev, |i| new(Self::from_pointee(i)))
+            }
+            Some(p) => {
+                if p.total < Self::allocator_counter().load(Ordering::Relaxed) {
+                    Self::allocator()
+                        .lock()
+                        .snapshot(Some(p), |i| new(Self::from_pointee(i)))
+                } else {
+                    p
+                }
+            }
+        }
+    }
 
     /// Returns a reference to the global map of T's by-name
     fn by_name() -> &'static ArcSwap<Map<Str, Self>>;
@@ -45,7 +72,7 @@ pub trait Hcstatic<T: Symbolic, const SLAB_SIZE: usize>:
         if validate {
             inner.validate()?;
         }
-        let inner = Self::pool().lock().insert(inner);
+        let inner = Self::allocator().lock().insert(inner);
         let t = Self::from_pointee(inner);
         by_name.insert_cow(inner.name(), t);
         by_id.insert_cow(inner.id(), t);
@@ -87,16 +114,22 @@ macro_rules! hcstatic {
         pub struct $name(&'static $inner);
 
         paste::paste! {
-            static [<$name:snake:upper _BY_NAME>]: Lazy<ArcSwap<Map<Str, $name>>> =
+            pub(crate) static [<$name:snake:upper _BY_NAME>]: Lazy<ArcSwap<Map<Str, $name>>> =
                 Lazy::new(|| ArcSwap::new(Arc::new(Map::new())));
-            static [<$name:snake:upper _BY_ID>]: Lazy<ArcSwap<Map<<$inner as Symbolic>::Id, $name>>> =
+            pub(crate) static [<$name:snake:upper _BY_ID>]: Lazy<ArcSwap<Map<<$inner as Symbolic>::Id, $name>>> =
                 Lazy::new(|| ArcSwap::new(Arc::new(Map::new())));
-            static [<$name:snake:upper _POOL>]: Lazy<Mutex<StaticBumpAllocator<$inner, $slab_size>>> =
-                Lazy::new(|| Mutex::new(StaticBumpAllocator::new()));
+            pub(crate) static [<$name:snake:upper _COUNT>]: Lazy<AtomicUsize> =
+                Lazy::new(|| AtomicUsize::new(0));
+            pub(crate) static [<$name:snake:upper _POOL>]: Lazy<Mutex<StaticBumpAllocator<$inner, $slab_size>>> =
+                Lazy::new(|| Mutex::new(StaticBumpAllocator::new(&[<$name:snake:upper _COUNT>])));
 
             impl Hcstatic<$inner, $slab_size> for $name {
-                fn pool() -> &'static Mutex<StaticBumpAllocator<$inner, $slab_size>> {
+                fn allocator() -> &'static Mutex<StaticBumpAllocator<$inner, $slab_size>> {
                     &[<$name:snake:upper _POOL>]
+                }
+
+                fn allocator_counter() -> &'static AtomicUsize {
+                    &[<$name:snake:upper _COUNT>]
                 }
 
                 fn by_name() -> &'static ArcSwap<Map<Str, Self>> {

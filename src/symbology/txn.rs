@@ -1,4 +1,4 @@
-use super::*;
+use super::{market::*, product::*, *};
 use anyhow::{anyhow, bail, Result};
 use api::{
     pool,
@@ -207,7 +207,7 @@ impl Txn {
         Product::insert(
             Arc::make_mut(&mut self.product_by_name),
             Arc::make_mut(&mut self.product_by_id),
-            product,
+            product.try_into()?,
             true,
         )
     }
@@ -228,7 +228,7 @@ impl Txn {
         Market::insert(
             Arc::make_mut(&mut self.market_by_name),
             Arc::make_mut(&mut self.market_by_id),
-            market,
+            market.try_into()?,
             true,
         )
     }
@@ -325,10 +325,10 @@ impl Txn {
             updates.push(SymbologyUpdateKind::AddRoute((**route).clone()));
         }
         for (_, product) in &*self.product_by_id {
-            updates.push(SymbologyUpdateKind::AddProduct((**product).clone()));
+            updates.push(SymbologyUpdateKind::AddProduct((**product).clone().into()));
         }
         for (_, market) in &*self.market_by_id {
-            updates.push(SymbologyUpdateKind::AddMarket((**market).clone()));
+            updates.push(SymbologyUpdateKind::AddMarket((**market).clone().into()));
         }
         updates
     }

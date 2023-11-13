@@ -254,7 +254,7 @@ impl BookVals {
             buy: PublishedBook::new(publisher, base, market, Dir::Buy, 5)?,
             sell: PublishedBook::new(publisher, base, market, Dir::Sell, 5)?,
         };
-        let tick_size = market.tick_size();
+        let tick_size = market.extra_info.tick_size();
         let grouped = [1, 10, 100, 1000, 5000, 10000]
             .into_iter()
             .map(|width_in_ticks| {
