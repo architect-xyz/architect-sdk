@@ -12,7 +12,8 @@ use log::warn;
 use md5::{Digest, Md5};
 use netidx::{pack::Pack, pool::Pooled};
 use parking_lot::{Mutex, MutexGuard};
-use std::{cell::RefCell, sync::Arc};
+use smallvec::SmallVec;
+use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 static TXN_LOCK: Mutex<()> = Mutex::new(());
 
@@ -161,6 +162,10 @@ impl Txn {
         TXN_LOCK.try_lock().map(Self::empty_inner)
     }
 
+    fn get_route_by_id(&self, id: &RouteId) -> Option<Route> {
+        self.route_by_id.get(id).copied()
+    }
+
     pub fn add_route(&mut self, route: api::symbology::Route) -> Result<Route> {
         Route::insert(
             Arc::make_mut(&mut self.route_by_name),
@@ -180,6 +185,10 @@ impl Txn {
             Arc::make_mut(&mut self.route_by_name),
             Arc::make_mut(&mut self.route_by_id),
         ))
+    }
+
+    fn get_venue_by_id(&self, id: &VenueId) -> Option<Venue> {
+        self.venue_by_id.get(id).copied()
     }
 
     pub fn add_venue(&mut self, venue: api::symbology::Venue) -> Result<Venue> {
@@ -203,13 +212,73 @@ impl Txn {
         ))
     }
 
+    fn get_product_by_id(&self, id: &ProductId) -> Option<Product> {
+        self.product_by_id.get(id).copied()
+    }
+
     pub fn add_product(&mut self, product: api::symbology::Product) -> Result<Product> {
+        // manually construct the inner ref type, because we are inside a transaction
+        // and the TryFrom impl might not know all the refs yet
+        let inner = self.resolve_product_inner(product)?;
         Product::insert(
             Arc::make_mut(&mut self.product_by_name),
             Arc::make_mut(&mut self.product_by_id),
-            product.try_into()?,
+            inner,
             true,
         )
+    }
+
+    /// Construct an hcstatic ProductInner from its corresponding API type; hydrates pointers
+    /// using the current state of the transaction.
+    fn resolve_product_inner(&self, p: api::symbology::Product) -> Result<ProductInner> {
+        Ok(ProductInner {
+            id: p.id,
+            name: p.name,
+            kind: self.resolve_product_kind(p.kind)?,
+        })
+    }
+
+    /// Construct an hcstatic ProductKind from its corresponding API type; hydrates pointers
+    /// using the current state of the transaction.
+    fn resolve_product_kind(
+        &self,
+        kind: api::symbology::ProductKind,
+    ) -> Result<ProductKind> {
+        use api::symbology::ProductKind as L;
+        Ok(match kind {
+            L::Coin { token_info: ti } => {
+                let mut token_info = BTreeMap::new();
+                for (k, v) in ti {
+                    let k = self
+                        .get_venue_by_id(&k)
+                        .ok_or_else(|| anyhow!("no such venue"))?;
+                    token_info.insert(k, v);
+                }
+                ProductKind::Coin { token_info }
+            }
+            L::Fiat => ProductKind::Fiat,
+            L::Equity => ProductKind::Equity,
+            L::Perpetual => ProductKind::Perpetual,
+            L::Future { underlying, multiplier, expiration } => ProductKind::Future {
+                underlying: self
+                    .get_product_by_id(&underlying)
+                    .ok_or_else(|| anyhow!("no such underlying"))?,
+                multiplier,
+                expiration,
+            },
+            L::Option { underlying, multiplier, expiration } => ProductKind::Option {
+                underlying: self
+                    .get_product_by_id(&underlying)
+                    .ok_or_else(|| anyhow!("no such underlying"))?,
+                multiplier,
+                expiration,
+            },
+            L::Commodity => ProductKind::Commodity,
+            L::Energy => ProductKind::Energy,
+            L::Metal => ProductKind::Metal,
+            L::Index => ProductKind::Index,
+            L::Unknown => ProductKind::Unknown,
+        })
     }
 
     pub fn remove_product(&mut self, product: &ProductId) -> Result<()> {
@@ -225,12 +294,68 @@ impl Txn {
     }
 
     pub fn add_market(&mut self, market: api::symbology::Market) -> Result<Market> {
+        // manually construct the inner ref type, because we are inside a transaction
+        // and the TryFrom impl might not know all the refs yet
+        let inner = self.resolve_market_inner(market)?;
         Market::insert(
             Arc::make_mut(&mut self.market_by_name),
             Arc::make_mut(&mut self.market_by_id),
-            market.try_into()?,
+            inner,
             true,
         )
+    }
+
+    /// Construct an hcstatic MarketInner from its corresponding API type; hydrates pointers
+    /// using the current state of the transaction.
+    pub fn resolve_market_inner(&self, m: api::symbology::Market) -> Result<MarketInner> {
+        Ok(MarketInner {
+            id: m.id,
+            name: m.name,
+            kind: self.resolve_market_kind(m.kind)?,
+            venue: self
+                .get_venue_by_id(&m.venue)
+                .ok_or_else(|| anyhow!("no such venue"))?
+                .clone(),
+            route: self
+                .get_route_by_id(&m.route)
+                .ok_or_else(|| anyhow!("no such route"))?
+                .clone(),
+            exchange_symbol: m.exchange_symbol,
+            extra_info: m.extra_info,
+        })
+    }
+
+    /// Construct an hcstatic MarketKind from its corresponding API type; hydrates pointers
+    /// using the current state of the transaction.
+    pub fn resolve_market_kind(
+        &self,
+        mk: api::symbology::MarketKind,
+    ) -> Result<MarketKind> {
+        Ok(match mk {
+            api::symbology::MarketKind::Exchange { base, quote } => {
+                MarketKind::Exchange {
+                    base: self
+                        .get_product_by_id(&base)
+                        .ok_or_else(|| anyhow!("no such base"))?
+                        .clone(),
+                    quote: self
+                        .get_product_by_id(&quote)
+                        .ok_or_else(|| anyhow!("no such quote"))?
+                        .clone(),
+                }
+            }
+            api::symbology::MarketKind::Pool(products) => {
+                let mut pool = SmallVec::new();
+                for p in products {
+                    let p = self
+                        .get_product_by_id(&p)
+                        .ok_or_else(|| anyhow!("no such product"))?;
+                    pool.push(p.clone());
+                }
+                MarketKind::Pool(pool)
+            }
+            api::symbology::MarketKind::Unknown => MarketKind::Unknown,
+        })
     }
 
     pub fn remove_market(&mut self, market: &MarketId) -> Result<()> {
@@ -325,7 +450,7 @@ impl Txn {
             updates.push(SymbologyUpdateKind::AddRoute((**route).clone()));
         }
         for (_, product) in &*self.product_by_id {
-            updates.push(SymbologyUpdateKind::AddProduct((**product).clone().into()));
+            updates.push(SymbologyUpdateKind::AddProduct((&**product).into()));
         }
         for (_, market) in &*self.market_by_id {
             updates.push(SymbologyUpdateKind::AddMarket((**market).clone().into()));

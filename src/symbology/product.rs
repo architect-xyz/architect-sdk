@@ -1,6 +1,6 @@
 use super::{allocator::StaticBumpAllocator, hcstatic::Hcstatic, Venue};
 use crate::hcstatic;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use api::{
     symbology::{
         product::{ProductId, TokenInfo},
@@ -22,18 +22,9 @@ use std::{
 hcstatic!(Product, ProductInner, 512);
 
 impl Product {
-    /// Forward the new impl of the inner type as a convenience
-    pub fn new(
-        name: &str,
-        kind: api::symbology::ProductKind,
-    ) -> Result<api::symbology::Product> {
-        api::symbology::Product::new(name, kind)
-    }
-}
-
-impl From<Product> for api::symbology::Product {
-    fn from(p: Product) -> api::symbology::Product {
-        p.clone().into()
+    /// forward the inner constructor as a convenience
+    pub fn new(name: &str, kind: ProductKind) -> Result<api::symbology::Product> {
+        api::symbology::Product::new(name, (&kind).into())
     }
 }
 
@@ -57,17 +48,9 @@ impl Symbolic for ProductInner {
     }
 }
 
-impl TryFrom<api::symbology::Product> for ProductInner {
-    type Error = anyhow::Error;
-
-    fn try_from(p: api::symbology::Product) -> Result<ProductInner> {
-        Ok(ProductInner { id: p.id, name: p.name, kind: ProductKind::try_from(p.kind)? })
-    }
-}
-
-impl From<ProductInner> for api::symbology::Product {
-    fn from(p: ProductInner) -> api::symbology::Product {
-        api::symbology::Product { id: p.id, name: p.name, kind: p.kind.into() }
+impl From<&ProductInner> for api::symbology::Product {
+    fn from(p: &ProductInner) -> api::symbology::Product {
+        api::symbology::Product { id: p.id, name: p.name, kind: (&p.kind).into() }
     }
 }
 
@@ -173,59 +156,13 @@ impl ProductKind {
     // }
 }
 
-impl TryFrom<api::symbology::ProductKind> for ProductKind {
-    type Error = anyhow::Error;
-
-    fn try_from(kind: api::symbology::ProductKind) -> Result<ProductKind> {
-        Ok(match kind {
-            api::symbology::ProductKind::Coin { token_info: ti } => {
-                let mut token_info = BTreeMap::new();
-                for (k, v) in ti {
-                    let k =
-                        Venue::get_by_id(&k).ok_or_else(|| anyhow!("no such venue"))?;
-                    token_info.insert(k, v);
-                }
-                ProductKind::Coin { token_info }
-            }
-            api::symbology::ProductKind::Fiat => ProductKind::Fiat,
-            api::symbology::ProductKind::Equity => ProductKind::Equity,
-            api::symbology::ProductKind::Perpetual => ProductKind::Perpetual,
-            api::symbology::ProductKind::Future {
-                underlying,
-                multiplier,
-                expiration,
-            } => ProductKind::Future {
-                underlying: Product::get_by_id(&underlying)
-                    .ok_or_else(|| anyhow!("no such underlying"))?,
-                multiplier,
-                expiration,
-            },
-            api::symbology::ProductKind::Option {
-                underlying,
-                multiplier,
-                expiration,
-            } => ProductKind::Option {
-                underlying: Product::get_by_id(&underlying)
-                    .ok_or_else(|| anyhow!("no such underlying"))?,
-                multiplier,
-                expiration,
-            },
-            api::symbology::ProductKind::Commodity => ProductKind::Commodity,
-            api::symbology::ProductKind::Energy => ProductKind::Energy,
-            api::symbology::ProductKind::Metal => ProductKind::Metal,
-            api::symbology::ProductKind::Index => ProductKind::Index,
-            api::symbology::ProductKind::Unknown => ProductKind::Unknown,
-        })
-    }
-}
-
-impl From<ProductKind> for api::symbology::ProductKind {
-    fn from(kind: ProductKind) -> api::symbology::ProductKind {
+impl From<&ProductKind> for api::symbology::ProductKind {
+    fn from(kind: &ProductKind) -> api::symbology::ProductKind {
         match kind {
             ProductKind::Coin { token_info } => {
                 let mut ti = BTreeMap::new();
                 for (k, v) in token_info {
-                    ti.insert(k.id, v);
+                    ti.insert(k.id, v.clone());
                 }
                 api::symbology::ProductKind::Coin { token_info: ti }
             }
@@ -235,15 +172,15 @@ impl From<ProductKind> for api::symbology::ProductKind {
             ProductKind::Future { underlying, multiplier, expiration } => {
                 api::symbology::ProductKind::Future {
                     underlying: underlying.id,
-                    multiplier,
-                    expiration,
+                    multiplier: *multiplier,
+                    expiration: *expiration,
                 }
             }
             ProductKind::Option { underlying, multiplier, expiration } => {
                 api::symbology::ProductKind::Option {
                     underlying: underlying.id,
-                    multiplier,
-                    expiration,
+                    multiplier: *multiplier,
+                    expiration: *expiration,
                 }
             }
             ProductKind::Commodity => api::symbology::ProductKind::Commodity,

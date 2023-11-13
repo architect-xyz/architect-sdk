@@ -1,6 +1,6 @@
 use super::{allocator::StaticBumpAllocator, hcstatic::Hcstatic, Product, Route, Venue};
 use crate::hcstatic;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use api::{
     qf::NetidxQfPaths,
     symbology::{
@@ -22,18 +22,18 @@ hcstatic!(Market, MarketInner, 512);
 impl Market {
     /// Forward the new impl of the inner type as a convenience
     pub fn exchange(
-        base: &api::symbology::Product,
-        quote: &api::symbology::Product,
-        venue: &api::symbology::Venue,
-        route: &api::symbology::Route,
+        base: Product,
+        quote: Product,
+        venue: Venue,
+        route: Route,
         exchange_symbol: &str,
         extra_info: api::symbology::MarketInfo,
     ) -> Result<api::symbology::Market> {
         api::symbology::Market::exchange(
-            base,
-            quote,
-            venue,
-            route,
+            &api::symbology::Product::from(&*base),
+            &api::symbology::Product::from(&*quote),
+            &*venue,
+            &*route,
             exchange_symbol,
             extra_info,
         )
@@ -41,13 +41,19 @@ impl Market {
 
     /// Forward the new impl of the inner type as a convenience
     pub fn pool(
-        products: &[api::symbology::Product],
-        venue: &api::symbology::Venue,
-        route: &api::symbology::Route,
+        products: impl Iterator<Item = Product>,
+        venue: Venue,
+        route: Route,
         exchange_symbol: &str,
         extra_info: api::symbology::MarketInfo,
     ) -> Result<api::symbology::Market> {
-        api::symbology::Market::pool(products, venue, route, exchange_symbol, extra_info)
+        api::symbology::Market::pool(
+            products.map(|p| (&*p).into()),
+            &venue,
+            &route,
+            exchange_symbol,
+            extra_info,
+        )
     }
 }
 
@@ -89,26 +95,6 @@ impl Symbolic for MarketInner {
     }
 }
 
-impl TryFrom<api::symbology::Market> for MarketInner {
-    type Error = anyhow::Error;
-
-    fn try_from(m: api::symbology::Market) -> Result<MarketInner> {
-        Ok(MarketInner {
-            id: m.id,
-            name: m.name,
-            kind: MarketKind::try_from(m.kind)?,
-            venue: Venue::get_by_id(&m.venue)
-                .ok_or_else(|| anyhow!("no such venue"))?
-                .clone(),
-            route: Route::get_by_id(&m.route)
-                .ok_or_else(|| anyhow!("no such route"))?
-                .clone(),
-            exchange_symbol: m.exchange_symbol,
-            extra_info: m.extra_info,
-        })
-    }
-}
-
 impl From<MarketInner> for api::symbology::Market {
     fn from(m: MarketInner) -> api::symbology::Market {
         api::symbology::Market {
@@ -129,33 +115,6 @@ pub enum MarketKind {
     Exchange { base: Product, quote: Product },
     Pool(SmallVec<[Product; 2]>),
     Unknown,
-}
-
-impl TryFrom<api::symbology::MarketKind> for MarketKind {
-    type Error = anyhow::Error;
-
-    fn try_from(mk: api::symbology::MarketKind) -> Result<MarketKind> {
-        Ok(match mk {
-            api::symbology::MarketKind::Exchange { base, quote } => {
-                MarketKind::Exchange {
-                    base: Product::get_by_id(&base)
-                        .ok_or_else(|| anyhow!("no such base"))?,
-                    quote: Product::get_by_id(&quote)
-                        .ok_or_else(|| anyhow!("no such quote"))?,
-                }
-            }
-            api::symbology::MarketKind::Pool(products) => {
-                let mut pool = SmallVec::new();
-                for p in products {
-                    let p = Product::get_by_id(&p)
-                        .ok_or_else(|| anyhow!("no such product"))?;
-                    pool.push(p);
-                }
-                MarketKind::Pool(pool)
-            }
-            api::symbology::MarketKind::Unknown => MarketKind::Unknown,
-        })
-    }
 }
 
 impl From<MarketKind> for api::symbology::MarketKind {

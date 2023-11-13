@@ -34,7 +34,7 @@ pub struct Cpty {
     pub route: Route,
 }
 
-// forward mount the [new] impls as a convenience
+// forward the inner [new] impls as a convenience
 
 impl Venue {
     pub fn new(name: &str) -> Result<api::symbology::Venue> {
