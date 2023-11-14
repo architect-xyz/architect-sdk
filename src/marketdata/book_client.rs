@@ -66,6 +66,10 @@ impl BookClient {
         self.subscription.id()
     }
 
+    pub fn book(&self) -> &LevelBook {
+        &self.book
+    }
+
     pub fn synced(&self) -> bool {
         self.synced
     }
