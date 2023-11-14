@@ -2,7 +2,7 @@ use super::{allocator::StaticBumpAllocator, hcstatic::Hcstatic, Product, Route, 
 use crate::hcstatic;
 use anyhow::{bail, Result};
 use api::{
-    qf::NetidxQfPaths,
+    marketdata::NetidxFeedPaths,
     symbology::{
         market::{MarketId, MarketInfo},
         Symbolic,
@@ -57,7 +57,7 @@ impl Market {
     }
 }
 
-impl NetidxQfPaths for Market {
+impl NetidxFeedPaths for Market {
     fn path_by_id(&self, base: &Path) -> Path {
         base.append("by-id").append(&self.id.to_string())
     }

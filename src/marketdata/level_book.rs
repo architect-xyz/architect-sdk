@@ -1,8 +1,7 @@
 /// Order book representation
 use api::{
-    pool,
-    qf::{Snapshot, Update, Updates},
-    Dir, DirPair,
+    marketdata::{Snapshot, Update, Updates},
+    pool, Dir, DirPair,
 };
 use chrono::prelude::*;
 use itertools::Itertools;

@@ -2,7 +2,7 @@
 use super::{consolidated_level_book::ConsolidatedLevelBook, level_book::LevelBook};
 use crate::symbology::Market;
 use anyhow::{anyhow, bail, Result};
-use api::qf::{MessageHeader, NetidxQfPaths, Snapshot, Updates};
+use api::marketdata::{MessageHeader, NetidxFeedPaths, Snapshot, Updates};
 use futures::channel::mpsc;
 use fxhash::FxHashMap;
 use log::trace;
