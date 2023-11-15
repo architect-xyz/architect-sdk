@@ -17,6 +17,9 @@ use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 static TXN_LOCK: Mutex<()> = Mutex::new(());
 
+// TODO: consider dropping transactionalized symbology;
+// now that price_in_limit_dollars isn't in here, we don't really need this
+
 /// A symbology update transaction. This is not a traditional ACID
 /// transaction. Specifically dropping a Txn after making changes to
 /// products or tradable products that exist in the global symbology

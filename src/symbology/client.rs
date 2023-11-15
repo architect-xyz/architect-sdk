@@ -187,7 +187,7 @@ impl Client {
     ///
     /// - if updates is None, then update the in process symbology
     /// database in the background.
-    pub fn new(
+    pub async fn start(
         subscriber: Subscriber,
         base_path: Path,
         updates: Option<mpsc::UnboundedSender<SymbologyUpdate>>,
@@ -220,7 +220,9 @@ impl Client {
         } else {
             None
         };
-        Client { task, status, write_rpcs }
+        let t = Client { task, status, write_rpcs };
+        t.wait_caught_up().await;
+        t
     }
 
     /// Return the current status of the symbology and a channel of status changes
