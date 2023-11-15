@@ -14,6 +14,7 @@ use immutable_chunkmap::map::MapL as Map;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rust_decimal::Decimal;
+use serde::Serialize;
 use std::{
     collections::BTreeMap,
     sync::{atomic::AtomicUsize, Arc},
@@ -25,6 +26,15 @@ impl Product {
     /// forward the inner constructor as a convenience
     pub fn new(name: &str, kind: ProductKind) -> Result<api::symbology::Product> {
         api::symbology::Product::new(name, (&kind).into())
+    }
+}
+
+impl Serialize for Product {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        self.name.serialize(serializer)
     }
 }
 
