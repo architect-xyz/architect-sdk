@@ -176,7 +176,7 @@ macro_rules! hcstatic {
 
         impl PartialEq for $name {
             fn eq(&self, other: &Self) -> bool {
-                (self.0 as *const $inner) == (other.0 as *const $inner)
+                self.0.name == other.0.name
             }
         }
 
@@ -184,21 +184,19 @@ macro_rules! hcstatic {
 
         impl std::hash::Hash for $name {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-                (self.0 as *const $inner).hash(state)
+                self.0.name.hash(state)
             }
         }
 
-        // note this will not produce a lexicographic ordering. If you need that,
-        // cast your pointer to a &'static str and sort
         impl PartialOrd for $name {
             fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                (self.0 as *const $inner).partial_cmp(&(other.0 as *const $inner))
+                self.0.name.partial_cmp(&other.0.name)
             }
         }
 
         impl Ord for $name {
             fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-                (self.0 as *const $inner).cmp(&(other.0 as *const $inner))
+                self.0.name.cmp(&other.0.name)
             }
         }
     };
