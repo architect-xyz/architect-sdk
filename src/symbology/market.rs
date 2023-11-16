@@ -1,5 +1,7 @@
-use super::{allocator::StaticBumpAllocator, hcstatic::Hcstatic, Product, Route, Venue};
-use crate::hcstatic;
+use super::{
+    allocator::StaticBumpAllocator, static_ref::StaticRef, Product, Route, Venue,
+};
+use crate::static_ref;
 use anyhow::{bail, Result};
 use api::{
     marketdata::NetidxFeedPaths,
@@ -17,7 +19,7 @@ use parking_lot::Mutex;
 use smallvec::SmallVec;
 use std::sync::{atomic::AtomicUsize, Arc};
 
-hcstatic!(Market, MarketInner, 512);
+static_ref!(Market, MarketInner, 512);
 
 impl Market {
     /// Forward the new impl of the inner type as a convenience
@@ -84,7 +86,7 @@ impl NetidxFeedPaths for Market {
     }
 }
 
-/// Derivation of `api::symbology::Market` where ids are replaced with hcstatics.
+/// Derivation of `api::symbology::Market` where ids are replaced with StaticRef's.
 #[derive(Debug, Clone)]
 pub struct MarketInner {
     pub id: MarketId,
@@ -122,7 +124,7 @@ impl From<MarketInner> for api::symbology::Market {
     }
 }
 
-/// Derivation of `api::symbology::MarketKind` where ids are replaced with hcstatics.
+/// Derivation of `api::symbology::MarketKind` where ids are replaced with StaticRef's.
 #[derive(Debug, Clone)]
 pub enum MarketKind {
     Exchange { base: Product, quote: Product },

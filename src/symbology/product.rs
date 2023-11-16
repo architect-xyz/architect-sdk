@@ -1,5 +1,5 @@
-use super::{allocator::StaticBumpAllocator, hcstatic::Hcstatic, Venue};
-use crate::hcstatic;
+use super::{allocator::StaticBumpAllocator, static_ref::StaticRef, Venue};
+use crate::static_ref;
 use anyhow::{bail, Result};
 use api::{
     symbology::{
@@ -20,7 +20,7 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 
-hcstatic!(Product, ProductInner, 512);
+static_ref!(Product, ProductInner, 512);
 
 impl Product {
     /// forward the inner constructor as a convenience
@@ -38,7 +38,7 @@ impl Serialize for Product {
     }
 }
 
-/// Derivation of `api::symbology::Product` where ids are replaced with hcstatics.
+/// Derivation of `api::symbology::Product` where ids are replaced with StaticRef's.
 #[derive(Debug, Clone)]
 pub struct ProductInner {
     pub id: ProductId,
@@ -64,7 +64,7 @@ impl From<&ProductInner> for api::symbology::Product {
     }
 }
 
-/// Derivation of `api::symbology::ProductKind` where ids are replaced with hcstatics.
+/// Derivation of `api::symbology::ProductKind` where ids are replaced with StaticRef's.
 #[derive(Debug, Clone)]
 pub enum ProductKind {
     Coin { token_info: BTreeMap<Venue, TokenInfo> },

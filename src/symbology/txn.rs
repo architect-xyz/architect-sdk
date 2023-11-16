@@ -17,8 +17,14 @@ use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 static TXN_LOCK: Mutex<()> = Mutex::new(());
 
-// TODO: consider dropping transactionalized symbology;
-// now that price_in_limit_dollars isn't in here, we don't really need this
+// CR alee: consider dropping transactionalized symbology;
+// now that we don't keep price_in_limit_dollars in symbology,
+// there's much less need for symbology updates to be
+// transactionalized, although we still have to lock.
+//
+// A compelling replacement might be a lock-free append-only
+// global hashmap, where each inner cell is an AtomicPtr to
+// the global pool, which is also append-only.
 
 /// A symbology update transaction. This is not a traditional ACID
 /// transaction. Specifically dropping a Txn after making changes to
@@ -231,7 +237,7 @@ impl Txn {
         )
     }
 
-    /// Construct an hcstatic ProductInner from its corresponding API type; hydrates pointers
+    /// Construct an sdk::ProductInner from its corresponding API type; hydrates pointers
     /// using the current state of the transaction.
     fn resolve_product_inner(&self, p: api::symbology::Product) -> Result<ProductInner> {
         Ok(ProductInner {
@@ -241,7 +247,7 @@ impl Txn {
         })
     }
 
-    /// Construct an hcstatic ProductKind from its corresponding API type; hydrates pointers
+    /// Construct an sdk::ProductKind from its corresponding API type; hydrates pointers
     /// using the current state of the transaction.
     fn resolve_product_kind(
         &self,
@@ -308,7 +314,7 @@ impl Txn {
         )
     }
 
-    /// Construct an hcstatic MarketInner from its corresponding API type; hydrates pointers
+    /// Construct an sdk::MarketInner from its corresponding API type; hydrates pointers
     /// using the current state of the transaction.
     pub fn resolve_market_inner(&self, m: api::symbology::Market) -> Result<MarketInner> {
         Ok(MarketInner {
@@ -328,7 +334,7 @@ impl Txn {
         })
     }
 
-    /// Construct an hcstatic MarketKind from its corresponding API type; hydrates pointers
+    /// Construct an sdk::MarketKind from its corresponding API type; hydrates pointers
     /// using the current state of the transaction.
     pub fn resolve_market_kind(
         &self,

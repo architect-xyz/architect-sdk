@@ -1,15 +1,15 @@
-//! Hash-consed, statically allocated symbology types
+//! Static references to symbology types, wrapped as newtypes.
 //!
 //! These are used to wrap symbology types from the symbology API, in order to achieve
 //! zero-copy performance for users of this reference client.  Instead of passing around
 //! the full API types, which can be large, users of this client can pass around these
 //! static reference wrappers.
 //!
-//! Newtypes created by `hcstatic!` shadow the names of their wrapped/inner types, as
+//! Newtypes created by `static_ref!` shadow the names of their wrapped/inner types, and
 //! the provided Deref impl should make their usage in either context transparent to the
 //! programmer.
 //!
-//! Newtypes created by `hcstatic!` implement the Hcstatic trait, which provides useful
+//! Newtypes created by `static_ref!` implement the StaticRef trait, which provides useful
 //! functionality for working with symbology.  The macro will also create the necessary
 //! process-global memory pools.
 
@@ -25,7 +25,7 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 
-pub trait Hcstatic<T: Symbolic, const SLAB_SIZE: usize>:
+pub trait StaticRef<T: Symbolic, const SLAB_SIZE: usize>:
     Clone + Copy + Deref<Target = T> + 'static
 {
     /// Returns a reference to the global pool of T's
@@ -108,7 +108,7 @@ pub trait Hcstatic<T: Symbolic, const SLAB_SIZE: usize>:
 }
 
 #[macro_export]
-macro_rules! hcstatic {
+macro_rules! static_ref {
     ($name:ident, $inner:ty, $slab_size:literal) => {
         #[derive(Debug, Clone, Copy)]
         pub struct $name(&'static $inner);
@@ -123,7 +123,7 @@ macro_rules! hcstatic {
             pub(crate) static [<$name:snake:upper _POOL>]: Lazy<Mutex<StaticBumpAllocator<$inner, $slab_size>>> =
                 Lazy::new(|| Mutex::new(StaticBumpAllocator::new(&[<$name:snake:upper _COUNT>])));
 
-            impl Hcstatic<$inner, $slab_size> for $name {
+            impl StaticRef<$inner, $slab_size> for $name {
                 fn allocator() -> &'static Mutex<StaticBumpAllocator<$inner, $slab_size>> {
                     &[<$name:snake:upper _POOL>]
                 }

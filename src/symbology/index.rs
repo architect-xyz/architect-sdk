@@ -1,7 +1,8 @@
 use super::{
-    allocator::AllocatorSnapshot, hcstatic::Hcstatic, market::MarketInner, Market,
+    allocator::AllocatorSnapshot, market::MarketInner, static_ref::StaticRef, Market,
     MarketKind, Product, ProductKind, Route, Venue,
 };
+use anyhow::{bail, Result};
 use api::{
     symbology::{
         market::NormalizedMarketInfo,
@@ -24,6 +25,7 @@ pub struct MarketIndex {
     by_quote: Map<Product, Set<Market>>,
     by_venue: Map<Venue, Set<Market>>,
     by_route: Map<Route, Set<Market>>,
+    by_exchange_symbol: Map<Str, Set<Market>>,
     by_underlying: Map<Product, Set<Market>>,
     by_expiration: Map<DateTime<Utc>, Set<Market>>,
     snap: Option<AllocatorSnapshot<MarketInner>>,
@@ -50,6 +52,7 @@ impl MarketIndex {
             by_pool_has: Map::default(),
             by_venue: Map::default(),
             by_route: Map::default(),
+            by_exchange_symbol: Map::default(),
             by_underlying: Map::default(),
             by_expiration: Map::default(),
             snap: None,
@@ -70,6 +73,7 @@ impl MarketIndex {
         self.all.insert_cow(i);
         insert(&mut self.by_venue, i.venue, i);
         insert(&mut self.by_route, i.route, i);
+        insert(&mut self.by_exchange_symbol, i.exchange_symbol, i);
         match &i.kind {
             MarketKind::Exchange { base, quote } => {
                 insert(&mut self.by_base, *base, i);
@@ -122,6 +126,7 @@ impl MarketIndex {
         self.all.remove_cow(&i);
         remove(&mut self.by_venue, i.venue, i);
         remove(&mut self.by_route, i.route, i);
+        remove(&mut self.by_exchange_symbol, i.exchange_symbol, i);
         match &i.kind {
             MarketKind::Exchange { base, quote } => {
                 remove(&mut self.by_base, *base, i);
@@ -198,6 +203,9 @@ impl MarketIndex {
             Query::Venue(s) => Venue::get(s).map_or_else(Set::new, |v| {
                 self.by_venue.get(&v).cloned().unwrap_or_else(Set::new)
             }),
+            Query::ExchangeSymbol(s) => {
+                self.by_exchange_symbol.get(s).cloned().unwrap_or_else(Set::new)
+            }
             Query::Underlying(s) => Product::get(s).map_or_else(Set::new, |p| {
                 self.by_underlying.get(&p).cloned().unwrap_or_else(Set::new)
             }),
@@ -251,10 +259,9 @@ impl MarketIndex {
         }
     }
 
-    /// index all the tradable products that were added to the
-    /// symbology since the index was last updated. If none were added
-    /// this is very quick. If the index has never been updated this
-    /// will index all tradable products
+    /// index all the markets that were added to the symbology since the index
+    /// was last updated. If none were added this is very quick. If the index
+    /// has never been updated this will index all tradable products
     pub fn update(&mut self) {
         let snap = Market::allocator_snapshot(self.snap, |p| self.insert(p));
         self.snap = Some(snap);
@@ -272,8 +279,40 @@ impl MarketIndex {
         self.query(q)
     }
 
-    /// Return all tradable products in the index
+    /// Return all markets in the index
     pub fn all(&self) -> Set<Market> {
         self.all.clone()
+    }
+
+    pub fn find_exactly_one_by_exchange_symbol(
+        &self,
+        venue: Venue,
+        route: Route,
+        exchange_symbol: Str,
+    ) -> Result<Market> {
+        let res = self
+            .by_exchange_symbol
+            .get(&exchange_symbol)
+            .cloned()
+            .unwrap_or_else(Set::new);
+        let mut iter = res.into_iter().filter(|m| m.venue == venue && m.route == route);
+        let first = iter.next();
+        if first.is_none() {
+            bail!(
+                "no market with exchange symbol {} for venue {} and route {}",
+                exchange_symbol.as_str(),
+                venue,
+                route
+            )
+        } else if iter.next().is_some() {
+            bail!(
+                "more than one market with exchange symbol {} for venue {} and route {}",
+                exchange_symbol.as_str(),
+                venue,
+                route
+            )
+        } else {
+            Ok(*first.unwrap())
+        }
     }
 }
