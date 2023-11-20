@@ -46,6 +46,7 @@ schemars = { version = "1.0.0", package = "architect-schemars", features = ["chr
 serde = { version = "1", features = ["derive"] }
 serde_derive = "1"
 serde_json = "1"
+serde_yaml = "0.9.27"
 sha2 = "0.10"
 smallvec = { version = "1", features = [ "serde", "const_generics", "union"] }
 time = { version = "0.3.20", features = ["serde"] }
