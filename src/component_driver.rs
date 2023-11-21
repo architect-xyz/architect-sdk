@@ -17,7 +17,7 @@ pub struct ComponentDriver {
 }
 
 impl ComponentDriver {
-    pub fn new(common: Common, id: ComponentId) -> Self {
+    pub fn new(common: &Common, id: ComponentId) -> Self {
         let (tx, rx) = fmpsc::channel(1000);
         let channel =
             common.subscriber.subscribe(common.paths.component(id).append("channel"));
