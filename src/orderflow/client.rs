@@ -14,11 +14,12 @@ impl Client {
         channel_authority: ComponentId,
     ) -> Result<Self> {
         info!("requesting channel id from channel authority...");
-        let mut channel_authority = ComponentDriver::new(common, channel_authority);
+        let mut channel_authority =
+            ComponentDriver::connect(common, channel_authority).await?;
         let channel_id = channel_authority
             .request_and_wait_for(
                 ChannelAuthorityMessage::RequestChannelId(Uuid::new_v4()),
-                |msg| msg.channel_id(),
+                |msg: ChannelAuthorityMessage| msg.channel_id(),
             )
             .await?;
         let order_ids = OrderIdGenerator::channel(channel_id)?;

@@ -1,6 +1,8 @@
 use crate::Common;
 use anyhow::{anyhow, Result};
-use api::{utils::messaging::MaybeRequest, ComponentId, Envelope};
+use api::{
+    utils::messaging::MaybeRequest, ComponentId, Envelope, MaybeSplit, TypedMessage,
+};
 use futures::channel::mpsc as fmpsc;
 use futures_util::StreamExt;
 use log::warn;
@@ -17,12 +19,13 @@ pub struct ComponentDriver {
 }
 
 impl ComponentDriver {
-    pub fn new(common: &Common, id: ComponentId) -> Self {
+    pub async fn connect(common: &Common, id: ComponentId) -> Result<Self> {
         let (tx, rx) = fmpsc::channel(1000);
         let channel =
             common.subscriber.subscribe(common.paths.component(id).append("channel"));
         channel.updates(UpdatesFlags::empty(), tx);
-        Self { id, channel, rx }
+        channel.wait_subscribed().await?;
+        Ok(Self { id, channel, rx })
     }
 
     pub fn send<M>(&mut self, msg: M)
@@ -33,10 +36,7 @@ impl ComponentDriver {
     }
 
     // TODO: is this cancel safe?
-    pub async fn recv<M>(&mut self) -> Result<Vec<M>>
-    where
-        M: FromValue + 'static,
-    {
+    pub async fn recv(&mut self) -> Result<Vec<Envelope<TypedMessage>>> {
         let mut messages = vec![];
         let mut batch = self
             .rx
@@ -49,10 +49,10 @@ impl ComponentDriver {
                     return Err(anyhow!("lost connection to component channel"))
                 }
                 Event::Update(Value::Null) => (),
-                Event::Update(v) => match M::from_value(v) {
+                Event::Update(v) => match Envelope::<TypedMessage>::from_value(v) {
                     Ok(m) => messages.push(m),
                     Err(e) => {
-                        warn!("ignoring message: {e}");
+                        warn!("ignoring undecipherable message: {e}");
                     }
                 },
             }
@@ -60,15 +60,17 @@ impl ComponentDriver {
         Ok(messages)
     }
 
+    // TODO: probably also pass into [f] the orig msg? also, entire envelope?
     /// Send message to a component and wait for a response that satisfies `f`.
     /// Ignores and discards any intervening messages.
-    pub async fn send_and_wait_for<M, T>(
+    pub async fn send_and_wait_for<M, R, T>(
         &mut self,
         msg: M,
-        mut f: impl FnMut(M) -> Option<T>,
+        mut f: impl FnMut(R) -> Option<T>,
     ) -> Result<T>
     where
         M: Pack + FromValue + 'static,
+        TypedMessage: TryInto<MaybeSplit<TypedMessage, R>>,
     {
         self.channel.write(Envelope::to(self.id, msg).into());
         'outer: while let Some(mut batch) = self.rx.next().await {
@@ -76,10 +78,16 @@ impl ComponentDriver {
                 match msg {
                     Event::Unsubscribed => break 'outer,
                     Event::Update(Value::Null) => (),
-                    Event::Update(v) => match M::from_value(v) {
-                        Ok(m) => {
-                            if let Some(t) = f(m) {
-                                return Ok(t);
+                    Event::Update(v) => match Envelope::<TypedMessage>::from_value(v) {
+                        Ok(en) => {
+                            if let Ok((_orig, msg)) =
+                                en.msg.try_into().map(MaybeSplit::parts)
+                            {
+                                if let Some(t) = f(msg) {
+                                    return Ok(t);
+                                }
+                            } else {
+                                warn!("got message not downcastable");
                             }
                         }
                         Err(e) => {
@@ -96,18 +104,20 @@ impl ComponentDriver {
     /// provided `unwrap` function on the response and returns the result.
     ///
     /// Ignores and discards any intervening messages.
-    pub async fn request_and_wait_for<M, T>(
+    pub async fn request_and_wait_for<M, R, T>(
         &mut self,
         msg: M,
-        unwrap: impl Fn(M) -> Result<T>,
+        unwrap: impl Fn(R) -> Result<T>,
     ) -> Result<T>
     where
         M: MaybeRequest + Pack + FromValue + 'static,
+        R: MaybeRequest,
+        TypedMessage: TryInto<MaybeSplit<TypedMessage, R>>,
     {
         let req_id = msg.request_id();
-        self.send_and_wait_for(msg, |msg| {
-            if msg.response_id() == req_id {
-                Some(unwrap(msg))
+        self.send_and_wait_for(msg, |res| {
+            if res.response_id() == req_id {
+                Some(unwrap(res))
             } else {
                 None
             }

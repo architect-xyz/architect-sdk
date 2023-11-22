@@ -23,16 +23,7 @@ impl Deref for Common {
 }
 
 impl Common {
-    async fn from_file<P: AsRef<std::path::Path>>(path: Option<P>) -> Result<Self> {
-        let config_path = match path {
-            Some(path) => path.as_ref().into(),
-            None => Config::default_path()?,
-        };
-        debug!("loading config from {:?}", config_path);
-        let f: Config =
-            serde_yaml::from_slice(&fs::read(&config_path).with_context(|| {
-                format!("no core config found at {}", config_path.display())
-            })?)?;
+    pub async fn from_config(config_path: Option<PathBuf>, f: Config) -> Result<Self> {
         let config = f.clone();
         let netidx_config = task::block_in_place(|| match &f.netidx_config {
             None => {
@@ -91,6 +82,19 @@ impl Common {
         })))
     }
 
+    async fn from_file<P: AsRef<std::path::Path>>(path: Option<P>) -> Result<Self> {
+        let config_path = match path {
+            Some(path) => path.as_ref().into(),
+            None => Config::default_path()?,
+        };
+        debug!("loading config from {:?}", config_path);
+        let f: Config =
+            serde_yaml::from_slice(&fs::read(&config_path).with_context(|| {
+                format!("no core config found at {}", config_path.display())
+            })?)?;
+        Self::from_config(Some(config_path), f).await
+    }
+
     /// Load from the specified file
     pub async fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         Self::from_file(Some(path)).await
@@ -105,7 +109,7 @@ impl Common {
 #[derive(Debug)]
 pub struct CommonInner {
     /// The path to the config that was loaded
-    pub config_path: PathBuf,
+    pub config_path: Option<PathBuf>,
     /// A copy of the raw config file
     pub config: Config,
     /// The netidx config used to build the publisher and subscriber
