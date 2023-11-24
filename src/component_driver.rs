@@ -21,8 +21,7 @@ pub struct ComponentDriver {
 impl ComponentDriver {
     pub async fn connect(common: &Common, id: ComponentId) -> Result<Self> {
         let (tx, rx) = fmpsc::channel(1000);
-        let channel =
-            common.subscriber.subscribe(common.paths.component(id).append("channel"));
+        let channel = common.subscriber.subscribe(common.paths.core().append("channel"));
         channel.updates(UpdatesFlags::empty(), tx);
         channel.wait_subscribed().await?;
         Ok(Self { id, channel, rx })

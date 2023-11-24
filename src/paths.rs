@@ -1,5 +1,4 @@
 use crate::symbology::Cpty;
-use api::ComponentId;
 use netidx::path::Path;
 use serde::{Deserialize, Serialize};
 
@@ -50,13 +49,8 @@ impl Paths {
         self.marketdata().append("rt").append(&cpty.venue.name).append(&cpty.route.name)
     }
 
-    /// Components
-    pub fn components(&self) -> Path {
-        self.local_base.append("components")
-    }
-
-    /// Component
-    pub fn component(&self, id: ComponentId) -> Path {
-        self.components().append(&Path::from(&format!("{id}")))
+    /// Core netidx interface
+    pub fn core(&self) -> Path {
+        self.local_base.append("core")
     }
 }
