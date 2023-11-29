@@ -10,7 +10,8 @@ use netidx::{
 use std::{fs, ops::Deref, path::PathBuf, sync::Arc};
 use tokio::task;
 
-/// Common data and functionality shared by most everything in the core.
+/// Common data and functionality shared by most everything in the core,
+/// derived from the config.  
 #[derive(Debug, Clone)]
 pub struct Common(pub Arc<CommonInner>);
 

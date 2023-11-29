@@ -57,8 +57,11 @@ impl PBook for PublishedBook {
     }
 
     fn clear_used(&mut self) {}
+
     fn mark_used(&mut self, _lvl: &Decimal) {}
+
     fn remove_unused_levels(&mut self) {}
+
     fn finalize_unused_levels(&mut self, _batch: &mut UpdateBatch) {}
 }
 

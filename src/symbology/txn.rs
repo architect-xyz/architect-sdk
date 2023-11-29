@@ -391,6 +391,17 @@ impl Txn {
             RemoveProduct(product) => self.remove_product(product),
             AddMarket(market) => self.add_market(market.clone()).map(|_| ()),
             RemoveMarket(market) => self.remove_market(market),
+            SnapshotUnchanged(_md5) => {
+                // CR alee: add an option to check md5 hash against current txn dump,
+                // for correctness verification; honestly we probably need a better
+                // way of keeping a hash of the current state of the symbology,
+                // something that can be quickly update on each change; then this
+                // check here can just be an Eq;
+                //
+                // see https://kerkour.com/fast-hashing-algorithms
+                // cf collision-resistant not necessarily cryptographic
+                Ok(())
+            }
             Snapshot { original_length, compressed } => {
                 thread_local! {
                     static BUF: RefCell<BytesMut> = RefCell::new(BytesMut::new());
