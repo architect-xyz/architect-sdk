@@ -13,40 +13,29 @@ categories = ["finance", "cryptography::cryptocurrencies"]
 [dependencies]
 anyhow = { workspace = true }
 api = { package = "architect-api", version = "0.2.0", path = "../api" }
-arcstr = { workspace = true }
 arc-swap = { workspace = true }
-base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
-compact_str = { workspace = true }
-derive = { package = "architect-derive", version = "0.2.0", path = "../derive" }
-enumflags2 = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 fxhash = { workspace = true }
-hmac = { workspace = true }
 immutable-chunkmap = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
 md-5 = { workspace = true }
 netidx = { workspace = true }
 netidx-core = { workspace = true }
-netidx-derive = { workspace = true }
 netidx-protocols = { workspace = true }
 num_cpus = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
 portable-atomic = { workspace = true }
-rand = { workspace = true }
 rust_decimal = { workspace = true }
 rust_decimal_macros = { workspace = true }
-schemars = { workspace = true }
 serde = { workspace = true }
 serde_derive = { workspace = true }
-serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-sha2 = { workspace = true }
 smallvec = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
