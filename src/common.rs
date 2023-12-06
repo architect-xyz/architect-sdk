@@ -41,7 +41,15 @@ impl Common {
             Some(a) => a,
         };
         let bind_config = match f.bind_config {
-            None => netidx_config.default_bind_config.clone(),
+            None => {
+                // a small sin (using env vars) to avoid a big one (having to split configs for Docker)
+                if let Ok(b) = std::env::var("OVERRIDE_BIND_CFG_FOR_DOCKER") {
+                    debug!("using bind config override: {b}");
+                    b.parse::<BindCfg>()?
+                } else {
+                    netidx_config.default_bind_config.clone()
+                }
+            }
             Some(b) => b.parse::<BindCfg>()?,
         };
         debug!("creating publisher");
@@ -65,21 +73,7 @@ impl Common {
             publisher_slack: f.publisher_slack,
             publisher,
             subscriber,
-            // display_subscriber: OnceCell::new(),
-            paths: Paths {
-                // component_location_override: FxHashMap::from_iter(
-                //     f.component_location_override,
-                // ),
-                // default_component_location: f.default_component_location,
-                hosted_base,
-                local_base,
-                // legacy_marketdata_paths: f.legacy_marketdata_paths,
-            },
-            // wsproxy_addr: f.wsproxy_addr.parse::<SocketAddr>()?,
-            // registration_servers: f.registration_servers,
-            // local_machine_components: f.local_machine_components,
-            // stats: OnceCell::new(),
-            // edge: f.edge,
+            paths: Paths { hosted_base, local_base },
         })))
     }
 
@@ -121,27 +115,12 @@ pub struct CommonInner {
     pub desired_auth: DesiredAuth,
     /// The netidx publisher bind config
     pub bind_config: BindCfg,
-    // TODO: document this shit
+    // CR alee: document this
     pub publisher_slack: Option<usize>,
     /// The netidx publisher object
     pub publisher: Publisher,
     /// The netidx subscriber object
     pub subscriber: Subscriber,
-    // CR alee: make this field private again, but need to do something
-    // about its use in architect-core/lib/test.rs
-    /// The display only subscriber, accessed via the method
-    // pub display_subscriber: OnceCell<Subscriber>,
     /// The path map
     pub paths: Paths,
-    // /// The address of wsproxy
-    // pub wsproxy_addr: SocketAddr,
-    // /// The addesses of the first-run registration servers
-    // pub registration_servers: Vec<String>,
-    // /// The list of components that should run on the local machine vs
-    // /// hosted somewhere
-    // pub local_machine_components: Vec<Component>,
-    // /// Sysadmin stats reporting.
-    // pub stats: OnceCell<UnboundedSender<(Path, StatCmd)>>,
-    // // Run as Architect Edge
-    // pub edge: bool,
 }

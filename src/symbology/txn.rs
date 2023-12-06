@@ -17,15 +17,6 @@ use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 static TXN_LOCK: Mutex<()> = Mutex::new(());
 
-// CR alee: consider dropping transactionalized symbology;
-// now that we don't keep price_in_limit_dollars in symbology,
-// there's much less need for symbology updates to be
-// transactionalized, although we still have to lock.
-//
-// A compelling replacement might be a lock-free append-only
-// global hashmap, where each inner cell is an AtomicPtr to
-// the global pool, which is also append-only.
-
 /// A symbology update transaction. This is not a traditional ACID
 /// transaction. Specifically dropping a Txn after making changes to
 /// products or tradable products that exist in the global symbology
@@ -513,14 +504,6 @@ impl Txn {
             }
             buf.resize(clen, 0u8);
             let compressed = buf.split().freeze();
-            // TODO: not sure what the point of the commented out stuff was
-            // it even seems wrong?
-            // I guess it was to give a stable thing to md5,
-            // but self.dump() is already deterministically ordered pretty sure
-            // updates.sort();
-            // for up in &*updates {
-            //     Pack::encode(up, &mut *buf)?;
-            // }
             let mut md5 = Md5::default();
             md5.update(&*buf);
             let md5_hash = md5.finalize();

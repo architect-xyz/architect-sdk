@@ -7,7 +7,7 @@ use std::{mem::MaybeUninit, sync::atomic::AtomicUsize};
 pub struct StaticBumpAllocator<T: Clone + 'static, const SZ: usize> {
     data: &'static mut [MaybeUninit<T>],
     pos: usize,
-    total: &'static AtomicUsize, // TODO: does this work
+    total: &'static AtomicUsize, // CR alee: does this work
     prev: Option<&'static Self>,
 }
 

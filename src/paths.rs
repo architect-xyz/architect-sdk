@@ -9,21 +9,14 @@ pub enum Location {
     Local,
 }
 
-// TODO: think a bit where this belongs. does it matter its not in api/sdk?
-// also this begs the existence of a ComponentKind type
+// CR alee: this begs the existence of a ComponentKind type
 /// Keeps track of where each component is publishing in netidx
 #[derive(Debug, Clone)]
 pub struct Paths {
     pub hosted_base: Path,
     pub local_base: Path,
-    // pub default_component_location: Location,
-    // pub component_location_override: FxHashMap<Component, Location>,
-    // CR-soon alee: remove after deprecation
-    // /// Use legacy by-id marketdata paths instead of newer by-name paths
-    // pub legacy_marketdata_paths: bool,
 }
 
-// TODO: actual paths
 impl Paths {
     /// given a location, return the base path in netidx under which
     /// that location's components may be found

@@ -25,7 +25,7 @@ pub use static_ref::StaticRef;
 pub use txn::Txn;
 
 // CR alee: TryFrom/Into api types for Product and Market could be optimized
-// to avoid unnec clone; make the Inner types Copy
+// to avoid unnecessary clone; make the Inner types Copy
 
 static_ref!(Venue, api::symbology::Venue, 64);
 static_ref!(Route, api::symbology::Route, 64);

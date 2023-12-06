@@ -7,7 +7,6 @@ use futures::channel::mpsc as fmpsc;
 use futures_util::StreamExt;
 use log::warn;
 use netidx::{
-    pack::Pack,
     pool::Pooled,
     subscriber::{Dval, Event, FromValue, SubId, UpdatesFlags, Value},
 };
@@ -27,14 +26,17 @@ impl ComponentDriver {
         Ok(Self { id, channel, rx })
     }
 
+    // CR alee: probably want to give these type signatures some more thought;
+    // one disadvantage to using Into<TypedMessage> as a bound is how to support
+    // custom builds without having to make a new api/sdk
     pub fn send<M>(&mut self, msg: M)
     where
-        M: Pack + 'static,
+        M: Into<TypedMessage>,
     {
-        self.channel.write(Envelope::to(self.id, msg).into());
+        self.channel.write(Envelope::to(self.id, Into::<TypedMessage>::into(msg)).into());
     }
 
-    // TODO: is this cancel safe?
+    // CR alee: is this cancel safe?
     pub async fn recv(&mut self) -> Result<Vec<Envelope<TypedMessage>>> {
         let mut messages = vec![];
         let mut batch = self
@@ -59,7 +61,6 @@ impl ComponentDriver {
         Ok(messages)
     }
 
-    // TODO: probably also pass into [f] the orig msg? also, entire envelope?
     /// Send message to a component and wait for a response that satisfies `f`.
     /// Ignores and discards any intervening messages.
     pub async fn send_and_wait_for<M, R, T>(
@@ -68,10 +69,10 @@ impl ComponentDriver {
         mut f: impl FnMut(R) -> Option<T>,
     ) -> Result<T>
     where
-        M: Pack + FromValue + 'static,
+        M: Into<TypedMessage>,
         TypedMessage: TryInto<MaybeSplit<TypedMessage, R>>,
     {
-        self.channel.write(Envelope::to(self.id, msg).into());
+        self.channel.write(Envelope::to(self.id, Into::<TypedMessage>::into(msg)).into());
         'outer: while let Some(mut batch) = self.rx.next().await {
             for (_, msg) in batch.drain(..) {
                 match msg {
@@ -109,7 +110,7 @@ impl ComponentDriver {
         unwrap: impl Fn(R) -> Result<T>,
     ) -> Result<T>
     where
-        M: MaybeRequest + Pack + FromValue + 'static,
+        M: MaybeRequest + Into<TypedMessage>,
         R: MaybeRequest,
         TypedMessage: TryInto<MaybeSplit<TypedMessage, R>>,
     {
