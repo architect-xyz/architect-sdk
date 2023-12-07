@@ -162,7 +162,7 @@ impl Txn {
         TXN_LOCK.try_lock().map(Self::empty_inner)
     }
 
-    fn get_route_by_id(&self, id: &RouteId) -> Option<Route> {
+    pub fn get_route_by_id(&self, id: &RouteId) -> Option<Route> {
         self.route_by_id.get(id).copied()
     }
 
@@ -187,7 +187,7 @@ impl Txn {
         ))
     }
 
-    fn get_venue_by_id(&self, id: &VenueId) -> Option<Venue> {
+    pub fn get_venue_by_id(&self, id: &VenueId) -> Option<Venue> {
         self.venue_by_id.get(id).copied()
     }
 

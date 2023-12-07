@@ -7,6 +7,7 @@ use api::{
     symbology::{
         market::NormalizedMarketInfo,
         query::{DateQ, Query},
+        RouteId, VenueId,
     },
     Str,
 };
@@ -286,8 +287,8 @@ impl MarketIndex {
 
     pub fn find_exactly_one_by_exchange_symbol(
         &self,
-        venue: Venue,
-        route: Route,
+        venue: VenueId,
+        route: RouteId,
         exchange_symbol: Str,
     ) -> Result<Market> {
         let res = self
@@ -295,7 +296,8 @@ impl MarketIndex {
             .get(&exchange_symbol)
             .cloned()
             .unwrap_or_else(Set::new);
-        let mut iter = res.into_iter().filter(|m| m.venue == venue && m.route == route);
+        let mut iter =
+            res.into_iter().filter(|m| m.venue.id == venue && m.route.id == route);
         let first = iter.next();
         if first.is_none() {
             bail!(

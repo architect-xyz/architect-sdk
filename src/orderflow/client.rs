@@ -3,7 +3,7 @@ use anyhow::{anyhow, bail, Result};
 use api::{orderflow::*, ComponentId, MaybeSplit, TypedMessage};
 use chrono::{DateTime, Utc};
 use fxhash::FxHashMap;
-use log::{info, warn};
+use log::{debug, info, warn};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use uuid::Uuid;
@@ -140,6 +140,7 @@ impl Client {
     pub async fn next(&mut self) -> Result<()> {
         let mut batch = self.driver.recv().await?;
         for env in batch.drain(..) {
+            debug!("received message: {:?}", env.msg);
             if let Ok((_, msg)) =
                 TryInto::<MaybeSplit<TypedMessage, OrderflowMessage>>::try_into(
                     env.msg.clone(),
@@ -156,6 +157,10 @@ impl Client {
 
     pub fn is_open(&self, oid: OrderId) -> bool {
         self.orders.get(&oid).map_or(false, |o| o.state.contains(OrderStateFlags::Open))
+    }
+
+    pub fn is_acked(&self, oid: OrderId) -> bool {
+        self.orders.get(&oid).map_or(false, |o| o.state.contains(OrderStateFlags::Acked))
     }
 
     pub fn is_filled(&self, oid: OrderId) -> bool {
