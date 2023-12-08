@@ -99,6 +99,17 @@ impl Common {
     pub async fn load_default() -> Result<Self> {
         Self::from_file(None::<&str>).await
     }
+
+    /// Convenience function to initialize symbology from [Common]
+    pub async fn start_symbology(&self, write: bool) -> crate::symbology::client::Client {
+        crate::symbology::client::Client::start(
+            self.subscriber.clone(),
+            self.paths.sym(),
+            None,
+            write,
+        )
+        .await
+    }
 }
 
 #[derive(Debug)]

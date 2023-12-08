@@ -1,7 +1,7 @@
 [package]
 authors = ["Architect Financial Technologies LLC"]
 description = "Architect.xyz Trading Platform SDK"
-documentation = "https://docs.rs/does-not-exist"
+documentation = "https://docs.rs/architect-sdk"
 homepage = "https://www.architect.xyz"
 license = "AGPL-3.0-only"
 name = "architect-sdk"
@@ -12,7 +12,7 @@ categories = ["finance", "cryptography::cryptocurrencies"]
 
 [dependencies]
 anyhow = { workspace = true }
-api = { package = "architect-api", version = "0.2.0", path = "../api" }
+api = { package = "architect-api", version = "0.2.1", path = "../api" }
 arc-swap = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
