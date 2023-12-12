@@ -1,13 +1,14 @@
 use crate::Paths;
 use anyhow::{Context, Result};
-use api::Config;
+use api::{symbology::CptyId, Config};
+use fxhash::FxHashMap;
 use log::debug;
 use netidx::{
     config::Config as NetidxConfig,
     publisher::{BindCfg, Publisher, PublisherBuilder},
     subscriber::{DesiredAuth, Subscriber},
 };
-use std::{fs, ops::Deref, path::PathBuf, sync::Arc};
+use std::{fs, ops::Deref, path::PathBuf, str::FromStr, sync::Arc};
 use tokio::task;
 
 /// Common data and functionality shared by most everything in the core,
@@ -62,6 +63,10 @@ impl Common {
         debug!("creating subscriber");
         let local_base = f.local_base;
         let hosted_base = f.hosted_base;
+        let mut marketdata_location_override = FxHashMap::default();
+        for (k, v) in f.marketdata_location_override {
+            marketdata_location_override.insert(CptyId::from_str(&k)?, v);
+        }
         let subscriber = Subscriber::new(netidx_config.clone(), desired_auth.clone())?;
         Ok(Self(Arc::new(CommonInner {
             config_path,
@@ -73,7 +78,7 @@ impl Common {
             publisher_slack: f.publisher_slack,
             publisher,
             subscriber,
-            paths: Paths { hosted_base, local_base },
+            paths: Paths { hosted_base, local_base, marketdata_location_override },
         })))
     }
 

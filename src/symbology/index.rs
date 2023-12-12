@@ -76,15 +76,15 @@ impl MarketIndex {
         insert(&mut self.by_route, i.route, i);
         insert(&mut self.by_exchange_symbol, i.exchange_symbol, i);
         match &i.kind {
-            MarketKind::Exchange { base, quote } => {
-                insert(&mut self.by_base, *base, i);
-                insert(&mut self.by_quote, *quote, i);
+            MarketKind::Exchange(x) => {
+                insert(&mut self.by_base, x.base, i);
+                insert(&mut self.by_quote, x.quote, i);
                 insert(
                     &mut self.by_base_kind,
-                    Str::try_from(base.kind.name()).unwrap(),
+                    Str::try_from(x.base.kind.name()).unwrap(),
                     i,
                 );
-                match base.kind {
+                match x.base.kind {
                     ProductKind::Coin { .. }
                     | ProductKind::Fiat
                     | ProductKind::Equity
@@ -101,8 +101,8 @@ impl MarketIndex {
                     | ProductKind::Unknown => (),
                 }
             }
-            MarketKind::Pool(pool) => {
-                for pr in pool {
+            MarketKind::Pool(p) => {
+                for pr in &p.products {
                     insert(&mut self.by_pool_has, *pr, i);
                 }
             }
@@ -129,15 +129,15 @@ impl MarketIndex {
         remove(&mut self.by_route, i.route, i);
         remove(&mut self.by_exchange_symbol, i.exchange_symbol, i);
         match &i.kind {
-            MarketKind::Exchange { base, quote } => {
-                remove(&mut self.by_base, *base, i);
-                remove(&mut self.by_quote, *quote, i);
+            MarketKind::Exchange(x) => {
+                remove(&mut self.by_base, x.base, i);
+                remove(&mut self.by_quote, x.quote, i);
                 remove(
                     &mut self.by_base_kind,
-                    Str::try_from(base.kind.name()).unwrap(),
+                    Str::try_from(x.base.kind.name()).unwrap(),
                     i,
                 );
-                match base.kind {
+                match x.base.kind {
                     ProductKind::Coin { .. }
                     | ProductKind::Fiat
                     | ProductKind::Equity
@@ -154,8 +154,8 @@ impl MarketIndex {
                     | ProductKind::Unknown => (),
                 }
             }
-            MarketKind::Pool(pool) => {
-                for pr in pool {
+            MarketKind::Pool(p) => {
+                for pr in &p.products {
                     remove(&mut self.by_pool_has, *pr, i);
                 }
             }
@@ -217,7 +217,7 @@ impl MarketIndex {
                     .into_iter()
                     .filter(|t| {
                         if let Some(exp) = match t.kind {
-                            MarketKind::Exchange { base, .. } => match base.kind {
+                            MarketKind::Exchange(ref x) => match x.base.kind {
                                 ProductKind::Future { expiration, .. }
                                 | ProductKind::Option { expiration, .. } => {
                                     Some(expiration)

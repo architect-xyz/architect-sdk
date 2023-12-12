@@ -67,12 +67,12 @@ impl NetidxFeedPaths for Market {
     fn path_by_name(&self, base: &Path) -> Path {
         let path = base.append("by-name");
         match &self.kind {
-            MarketKind::Exchange { base, quote } => {
-                path.append(&base.name).append(&quote.name)
+            MarketKind::Exchange(emk) => {
+                path.append(&emk.base.name).append(&emk.quote.name)
             }
-            MarketKind::Pool(pool) => {
+            MarketKind::Pool(pmk) => {
                 let mut path = path;
-                for p in pool {
+                for p in &pmk.products {
                     path = path.append(&p.name);
                 }
                 path
@@ -127,21 +127,47 @@ impl From<MarketInner> for api::symbology::Market {
 /// Derivation of `api::symbology::MarketKind` where ids are replaced with StaticRef's.
 #[derive(Debug, Clone)]
 pub enum MarketKind {
-    Exchange { base: Product, quote: Product },
-    Pool(SmallVec<[Product; 2]>),
+    Exchange(ExchangeMarketKind),
+    Pool(PoolMarketKind),
     Unknown,
 }
 
 impl From<MarketKind> for api::symbology::MarketKind {
     fn from(mk: MarketKind) -> api::symbology::MarketKind {
         match mk {
-            MarketKind::Exchange { base, quote } => {
-                api::symbology::MarketKind::Exchange { base: base.id, quote: quote.id }
-            }
-            MarketKind::Pool(products) => api::symbology::MarketKind::Pool(
-                products.into_iter().map(|p| p.id).collect(),
-            ),
+            MarketKind::Exchange(emk) => api::symbology::MarketKind::Exchange(emk.into()),
+            MarketKind::Pool(pmk) => api::symbology::MarketKind::Pool(pmk.into()),
             MarketKind::Unknown => api::symbology::MarketKind::Unknown,
+        }
+    }
+}
+
+/// Derivation of `api::symbology::ExchangeMarketKind` where ids are replaced with StaticRef's.
+#[derive(Debug, Clone)]
+pub struct ExchangeMarketKind {
+    pub base: Product,
+    pub quote: Product,
+}
+
+impl From<ExchangeMarketKind> for api::symbology::market::ExchangeMarketKind {
+    fn from(emk: ExchangeMarketKind) -> api::symbology::market::ExchangeMarketKind {
+        api::symbology::market::ExchangeMarketKind {
+            base: emk.base.id,
+            quote: emk.quote.id,
+        }
+    }
+}
+
+/// Derivation of `api::symbology::PoolMarketKind` where ids are replaced with StaticRef's.
+#[derive(Debug, Clone)]
+pub struct PoolMarketKind {
+    pub products: SmallVec<[Product; 2]>,
+}
+
+impl From<PoolMarketKind> for api::symbology::market::PoolMarketKind {
+    fn from(pmk: PoolMarketKind) -> api::symbology::market::PoolMarketKind {
+        api::symbology::market::PoolMarketKind {
+            products: pmk.products.into_iter().map(|p| p.id).collect(),
         }
     }
 }

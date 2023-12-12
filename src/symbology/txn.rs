@@ -332,27 +332,27 @@ impl Txn {
         mk: api::symbology::MarketKind,
     ) -> Result<MarketKind> {
         Ok(match mk {
-            api::symbology::MarketKind::Exchange { base, quote } => {
-                MarketKind::Exchange {
+            api::symbology::MarketKind::Exchange(x) => {
+                MarketKind::Exchange(ExchangeMarketKind {
                     base: self
-                        .get_product_by_id(&base)
+                        .get_product_by_id(&x.base)
                         .ok_or_else(|| anyhow!("no such base"))?
                         .clone(),
                     quote: self
-                        .get_product_by_id(&quote)
+                        .get_product_by_id(&x.quote)
                         .ok_or_else(|| anyhow!("no such quote"))?
                         .clone(),
-                }
+                })
             }
-            api::symbology::MarketKind::Pool(products) => {
+            api::symbology::MarketKind::Pool(p) => {
                 let mut pool = SmallVec::new();
-                for p in products {
+                for p in &p.products {
                     let p = self
                         .get_product_by_id(&p)
                         .ok_or_else(|| anyhow!("no such product"))?;
                     pool.push(p.clone());
                 }
-                MarketKind::Pool(pool)
+                MarketKind::Pool(PoolMarketKind { products: pool })
             }
             api::symbology::MarketKind::Unknown => MarketKind::Unknown,
         })

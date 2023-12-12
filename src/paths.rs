@@ -1,13 +1,7 @@
 use crate::symbology::Cpty;
+use api::{config::Location, symbology::CptyId};
+use fxhash::FxHashMap;
 use netidx::path::Path;
-use serde::{Deserialize, Serialize};
-
-/// Component location--local to the installation, or hosted by Architect
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum Location {
-    Hosted,
-    Local,
-}
 
 // CR alee: this begs the existence of a ComponentKind type
 /// Keeps track of where each component is publishing in netidx
@@ -15,6 +9,7 @@ pub enum Location {
 pub struct Paths {
     pub hosted_base: Path,
     pub local_base: Path,
+    pub marketdata_location_override: FxHashMap<CptyId, Location>,
 }
 
 impl Paths {
@@ -33,13 +28,21 @@ impl Paths {
     }
 
     /// Marketdata feeds
-    pub fn marketdata(&self) -> Path {
-        self.local_base.append("qf")
+    pub fn marketdata(&self, cpty: Cpty) -> Path {
+        let base = self.base(
+            self.marketdata_location_override
+                .get(&CptyId { venue: cpty.venue.id, route: cpty.route.id })
+                .unwrap_or(&Location::Local),
+        );
+        base.append("qf")
     }
 
     /// Realtime marketdata feeds
     pub fn marketdata_rt(&self, cpty: Cpty) -> Path {
-        self.marketdata().append("rt").append(&cpty.venue.name).append(&cpty.route.name)
+        self.marketdata(cpty)
+            .append("rt")
+            .append(&cpty.venue.name)
+            .append(&cpty.route.name)
     }
 
     /// Core netidx interface
