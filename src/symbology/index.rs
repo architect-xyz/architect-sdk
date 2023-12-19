@@ -43,7 +43,7 @@ impl FromIterator<Market> for MarketIndex {
 }
 
 impl MarketIndex {
-    /// create a new empty tradable product index
+    /// create a new empty market index
     pub fn new() -> Self {
         Self {
             all: Set::new(),
