@@ -67,16 +67,28 @@ impl From<&ProductInner> for api::symbology::Product {
 /// Derivation of `api::symbology::ProductKind` where ids are replaced with StaticRef's.
 #[derive(Debug, Clone)]
 pub enum ProductKind {
-    Coin { token_info: BTreeMap<Venue, TokenInfo> },
+    Coin {
+        token_info: BTreeMap<Venue, TokenInfo>,
+    },
     Fiat,
     Equity,
     Perpetual,
-    Future { underlying: Product, multiplier: Decimal, expiration: DateTime<Utc> },
-    Option { underlying: Product, multiplier: Decimal, expiration: DateTime<Utc> },
-    Commodity,
-    Energy,
-    Metal,
+    Future {
+        underlying: Option<Product>,
+        multiplier: Option<Decimal>,
+        expiration: Option<DateTime<Utc>>,
+    },
+    FutureSpread {
+        same_side_leg: Option<Product>,
+        opp_side_leg: Option<Product>,
+    },
+    Option {
+        underlying: Option<Product>,
+        multiplier: Option<Decimal>,
+        expiration: Option<DateTime<Utc>>,
+    },
     Index,
+    Commodity,
     Unknown,
 }
 
@@ -89,11 +101,10 @@ impl ProductKind {
             ProductKind::Equity => "Equity",
             ProductKind::Perpetual => "Perpetual",
             ProductKind::Future { .. } => "Future",
+            ProductKind::FutureSpread { .. } => "FutureSpread",
             ProductKind::Option { .. } => "Option",
-            ProductKind::Commodity => "Commodity",
-            ProductKind::Energy => "Energy",
-            ProductKind::Metal => "Metal",
             ProductKind::Index => "Index",
+            ProductKind::Commodity => "Commodity",
             ProductKind::Unknown => "Unknown",
         }
     }
@@ -181,22 +192,26 @@ impl From<&ProductKind> for api::symbology::ProductKind {
             ProductKind::Perpetual => api::symbology::ProductKind::Perpetual,
             ProductKind::Future { underlying, multiplier, expiration } => {
                 api::symbology::ProductKind::Future {
-                    underlying: underlying.id,
+                    underlying: underlying.map(|u| u.id),
                     multiplier: *multiplier,
                     expiration: *expiration,
+                }
+            }
+            ProductKind::FutureSpread { same_side_leg, opp_side_leg } => {
+                api::symbology::ProductKind::FutureSpread {
+                    same_side_leg: same_side_leg.map(|p| p.id),
+                    opp_side_leg: opp_side_leg.map(|p| p.id),
                 }
             }
             ProductKind::Option { underlying, multiplier, expiration } => {
                 api::symbology::ProductKind::Option {
-                    underlying: underlying.id,
+                    underlying: underlying.map(|u| u.id),
                     multiplier: *multiplier,
                     expiration: *expiration,
                 }
             }
-            ProductKind::Commodity => api::symbology::ProductKind::Commodity,
-            ProductKind::Energy => api::symbology::ProductKind::Energy,
-            ProductKind::Metal => api::symbology::ProductKind::Metal,
             ProductKind::Index => api::symbology::ProductKind::Index,
+            ProductKind::Commodity => api::symbology::ProductKind::Commodity,
             ProductKind::Unknown => api::symbology::ProductKind::Unknown,
         }
     }

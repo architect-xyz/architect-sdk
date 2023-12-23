@@ -260,22 +260,46 @@ impl Txn {
             L::Equity => ProductKind::Equity,
             L::Perpetual => ProductKind::Perpetual,
             L::Future { underlying, multiplier, expiration } => ProductKind::Future {
-                underlying: self
-                    .get_product_by_id(&underlying)
-                    .ok_or_else(|| anyhow!("no such underlying"))?,
+                underlying: match underlying {
+                    None => None,
+                    Some(underlying) => Some(
+                        self.get_product_by_id(&underlying)
+                            .ok_or_else(|| anyhow!("no such underlying"))?,
+                    ),
+                },
                 multiplier,
                 expiration,
             },
+            L::FutureSpread { same_side_leg, opp_side_leg } => {
+                ProductKind::FutureSpread {
+                    same_side_leg: match same_side_leg {
+                        None => None,
+                        Some(id) => Some(
+                            self.get_product_by_id(&id)
+                                .ok_or_else(|| anyhow!("no such leg"))?,
+                        ),
+                    },
+                    opp_side_leg: match opp_side_leg {
+                        None => None,
+                        Some(id) => Some(
+                            self.get_product_by_id(&id)
+                                .ok_or_else(|| anyhow!("no such leg"))?,
+                        ),
+                    },
+                }
+            }
             L::Option { underlying, multiplier, expiration } => ProductKind::Option {
-                underlying: self
-                    .get_product_by_id(&underlying)
-                    .ok_or_else(|| anyhow!("no such underlying"))?,
+                underlying: match underlying {
+                    None => None,
+                    Some(underlying) => Some(
+                        self.get_product_by_id(&underlying)
+                            .ok_or_else(|| anyhow!("no such underlying"))?,
+                    ),
+                },
                 multiplier,
                 expiration,
             },
             L::Commodity => ProductKind::Commodity,
-            L::Energy => ProductKind::Energy,
-            L::Metal => ProductKind::Metal,
             L::Index => ProductKind::Index,
             L::Unknown => ProductKind::Unknown,
         })

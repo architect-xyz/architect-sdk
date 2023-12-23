@@ -91,13 +91,23 @@ impl MarketIndex {
                     | ProductKind::Perpetual => (),
                     ProductKind::Future { underlying, multiplier: _, expiration }
                     | ProductKind::Option { underlying, multiplier: _, expiration } => {
-                        insert(&mut self.by_underlying, underlying, i);
-                        insert(&mut self.by_expiration, expiration, i);
+                        if let Some(underlying) = underlying {
+                            insert(&mut self.by_underlying, underlying, i);
+                        }
+                        if let Some(expiration) = expiration {
+                            insert(&mut self.by_expiration, expiration, i);
+                        }
                     }
-                    ProductKind::Commodity
-                    | ProductKind::Energy
-                    | ProductKind::Metal
-                    | ProductKind::Index
+                    ProductKind::FutureSpread { same_side_leg, opp_side_leg } => {
+                        if let Some(leg) = same_side_leg {
+                            insert(&mut self.by_underlying, leg, i);
+                        }
+                        if let Some(leg) = opp_side_leg {
+                            insert(&mut self.by_underlying, leg, i);
+                        }
+                    }
+                    ProductKind::Index
+                    | ProductKind::Commodity
                     | ProductKind::Unknown => (),
                 }
             }
@@ -144,13 +154,23 @@ impl MarketIndex {
                     | ProductKind::Perpetual => (),
                     ProductKind::Future { underlying, multiplier: _, expiration }
                     | ProductKind::Option { underlying, multiplier: _, expiration } => {
-                        remove(&mut self.by_underlying, underlying, i);
-                        remove(&mut self.by_expiration, expiration, i);
+                        if let Some(underlying) = underlying {
+                            remove(&mut self.by_underlying, underlying, i);
+                        }
+                        if let Some(expiration) = expiration {
+                            remove(&mut self.by_expiration, expiration, i);
+                        }
                     }
-                    ProductKind::Commodity
-                    | ProductKind::Energy
-                    | ProductKind::Metal
-                    | ProductKind::Index
+                    ProductKind::FutureSpread { same_side_leg, opp_side_leg } => {
+                        if let Some(leg) = same_side_leg {
+                            remove(&mut self.by_underlying, leg, i);
+                        }
+                        if let Some(leg) = opp_side_leg {
+                            remove(&mut self.by_underlying, leg, i);
+                        }
+                    }
+                    ProductKind::Index
+                    | ProductKind::Commodity
                     | ProductKind::Unknown => (),
                 }
             }
@@ -226,8 +246,13 @@ impl MarketIndex {
                             },
                             _ => None,
                         } {
-                            if exp < now - Duration::hours(8) {
-                                return false;
+                            match exp {
+                                None => return false,
+                                Some(exp) => {
+                                    if exp < now - Duration::hours(8) {
+                                        return false;
+                                    }
+                                }
                             }
                         }
                         !t.extra_info.is_delisted()
