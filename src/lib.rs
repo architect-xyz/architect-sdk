@@ -1,5 +1,6 @@
 pub mod common;
 pub mod component_driver;
+pub mod driver;
 pub mod marketdata;
 pub mod oms;
 pub mod orderflow;

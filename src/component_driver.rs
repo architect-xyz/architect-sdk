@@ -28,8 +28,11 @@ impl ComponentDriver {
 
     // CR alee: probably want to give these type signatures some more thought;
     // one disadvantage to using Into<TypedMessage> as a bound is how to support
-    // custom builds without having to make a new api/sdk
-    pub fn send<M>(&mut self, msg: M)
+    // custom builds without having to make a new api/sdk;
+    //
+    // another observation: this isn't symmetric with receive...we're sending
+    // TypedMessage's but getting Envelope<TypedMessage>'s
+    pub fn send<M>(&self, msg: M)
     where
         M: Into<TypedMessage>,
     {

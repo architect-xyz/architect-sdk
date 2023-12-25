@@ -225,6 +225,13 @@ impl Client {
         t
     }
 
+    pub fn write_only(subscriber: &Subscriber, base_path: Path) -> Self {
+        let task = tokio::task::spawn(async move { future::pending().await });
+        let status = StatusCtx::new();
+        let write_rpcs = WriteRpcs::new(subscriber, base_path).unwrap();
+        Self { task, status, write_rpcs: Some(write_rpcs) }
+    }
+
     /// Return the current status of the symbology and a channel of status changes
     pub fn status(&self) -> (Status, broadcast::Receiver<Status>) {
         self.status.subscribe()
