@@ -342,4 +342,42 @@ impl MarketIndex {
             Ok(*first.unwrap())
         }
     }
+
+    pub fn find_exactly_one_by_base_and_quote(
+        &self,
+        venue: VenueId,
+        route: RouteId,
+        base: Product,
+        quote: Product,
+    ) -> Result<Market> {
+        let res = self.by_base.get(&base).cloned().unwrap_or_else(Set::new);
+        let mut iter = res.into_iter().filter(|m| {
+            m.venue.id == venue
+                && m.route.id == route
+                && match &m.kind {
+                    MarketKind::Exchange(e) => e.quote.id == quote.id,
+                    _ => false,
+                }
+        });
+        let first = iter.next();
+        if first.is_none() {
+            bail!(
+                "no market with base {} and quote {} for venue {} and route {}",
+                base,
+                quote,
+                venue,
+                route
+            )
+        } else if iter.next().is_some() {
+            bail!(
+                "more than one market with base {} and quote {} for venue {} and route {}",
+                base,
+                quote,
+                venue,
+                route
+            )
+        } else {
+            Ok(*first.unwrap())
+        }
+    }
 }

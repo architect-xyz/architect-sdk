@@ -45,6 +45,22 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
+    /// Marketdata APIs (RPCs)
+    pub fn marketdata_api(&self, cpty: Cpty) -> Path {
+        self.marketdata(cpty)
+            .append("api")
+            .append(&cpty.venue.name)
+            .append(&cpty.route.name)
+    }
+
+    /// RFQ feeds
+    pub fn marketdata_rfq(&self, cpty: Cpty) -> Path {
+        self.marketdata(cpty)
+            .append("rfq")
+            .append(&cpty.venue.name)
+            .append(&cpty.route.name)
+    }
+
     /// Core netidx interface
     pub fn core(&self) -> Path {
         self.local_base.append("core")
