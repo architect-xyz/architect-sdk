@@ -35,6 +35,7 @@ rust_decimal = { workspace = true }
 rust_decimal_macros = { workspace = true }
 serde = { workspace = true }
 serde_derive = { workspace = true }
+serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 smallvec = { workspace = true }
 time = { workspace = true }
