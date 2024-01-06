@@ -17,6 +17,7 @@ use std::ops::Deref;
 /// A subscription to book data
 pub struct BookClient {
     book: LevelBook,
+    market: Market,
     subscription: Dval,
     synced: bool,
 }
@@ -58,7 +59,7 @@ impl BookClient {
             // snapshot manually
             subscription.write(Value::Null);
         }
-        Self { book: LevelBook::default(), subscription, synced: false }
+        Self { book: LevelBook::default(), market, subscription, synced: false }
     }
 
     /// Return the id of this subscription
@@ -68,6 +69,10 @@ impl BookClient {
 
     pub fn book(&self) -> &LevelBook {
         &self.book
+    }
+
+    pub fn market(&self) -> &Market {
+        &self.market
     }
 
     pub fn synced(&self) -> bool {
