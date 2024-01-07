@@ -1,7 +1,10 @@
 use crate::static_ref;
 use allocator::StaticBumpAllocator;
 use anyhow::{bail, Result};
-use api::{symbology::Symbolic, Str};
+use api::{
+    symbology::{CptyId, Symbolic},
+    Str,
+};
 use arc_swap::ArcSwap;
 use immutable_chunkmap::map::MapL as Map;
 use once_cell::sync::Lazy;
@@ -60,6 +63,18 @@ impl Cpty {
         } else {
             None
         }
+    }
+
+    pub fn get_by_id(id: &CptyId) -> Option<Self> {
+        let venue = Venue::get_by_id(&id.venue)?;
+        let route = Route::get_by_id(&id.route)?;
+        Some(Self { venue, route })
+    }
+}
+
+impl Into<CptyId> for Cpty {
+    fn into(self) -> CptyId {
+        CptyId { venue: self.venue.id, route: self.route.id }
     }
 }
 
