@@ -53,6 +53,15 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
+    /// Hist marketdata candles
+    pub fn marketdata_hist_ohlc(&self, cpty: Cpty) -> Path {
+        self.marketdata(cpty)
+            .append("hist")
+            .append("ohlc")
+            .append(&cpty.venue.name)
+            .append(&cpty.route.name)
+    }
+
     /// Marketdata APIs (RPCs)
     pub fn marketdata_api(&self, cpty: Cpty) -> Path {
         self.marketdata(cpty)
