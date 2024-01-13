@@ -1,90 +1,61 @@
-//! Simple orderflow client suitable for connecting to an Oms
-//! or directly to a Cpty.  It doesn't do much more than connect
-//! to a channel authority and pass orderflow messages through.
+//! Simple orderflow client suitable for connecting to an Oms or directly
+//! to a Cpty.  It handles connecting to an OrderflowAuthority, requesting
+//! an order id range, and passing orderflow messages.
 
-use crate::{Common, ComponentDriver};
+use crate::{ChannelDriver, Common, OrderIdAllocator};
 use anyhow::{anyhow, Result};
-use api::{orderflow::*, ComponentId, Envelope, MaybeSplit, TypedMessage};
-use log::{debug, info, warn};
-use uuid::Uuid;
+use api::{orderflow::*, ComponentId, TypedMessage};
+use log::info;
 
 pub struct OrderflowClient {
-    driver: ComponentDriver,
-    order_ids: OrderIdGenerator,
+    driver: ChannelDriver,
+    order_ids: OrderIdAllocator,
+    target: ComponentId,
 }
 
 impl OrderflowClient {
     /// Connect to a component that implements an orderflow interface.  If no target is specified,
-    /// search for an "Oms" component in the config.  If no channel authority is specified, search
-    /// for a "ChannelAuthority" component in the config.
+    /// search for an "Oms" component in the config.  If no order authority is specified, search
+    /// for a "OrderAuthority" component in the config.
+    ///
+    /// If no order id range is specified, default to 2^20.
     pub async fn connect(
         common: &Common,
-        channel_authority: Option<ComponentId>,
+        order_authority: Option<ComponentId>,
+        order_id_range: Option<u64>,
         target: Option<ComponentId>,
     ) -> Result<Self> {
-        let channel_authority = channel_authority
-            .or_else(|| {
-                info!("no channel authority specified; searching for one in config...");
-                common
-                    .config
-                    .find_local_component_of_kind("ChannelAuthority")
-                    .map(|(id, _)| id)
-            })
-            .ok_or_else(|| anyhow!("no channel authority found"))?;
-        info!("requesting channel id from channel authority...");
-        let mut channel_authority =
-            ComponentDriver::connect(common, channel_authority).await?;
-        let channel_id = channel_authority
-            .request_and_wait_for(
-                ChannelAuthorityMessage::RequestChannelId(Uuid::new_v4()),
-                |msg: ChannelAuthorityMessage| msg.channel_id(),
-            )
-            .await?;
-        let order_ids = OrderIdGenerator::channel(channel_id)?;
+        let mut driver = ChannelDriver::connect(common).await?;
+        let order_ids: OrderIdAllocator = OrderIdAllocator::get_allocation_with_driver(
+            common,
+            &mut driver,
+            order_authority,
+            order_id_range,
+        )
+        .await?
+        .into();
         let target = target
             .or_else(|| {
                 info!("no target specified; searching for an Oms in config...");
-                common.config.find_local_component_of_kind("Oms").map(|(id, _)| id)
+                common.find_component_of_kind("Oms")
             })
             .ok_or_else(|| anyhow!("no target found"))?;
-        info!("connecting to target {target}...");
-        let driver = ComponentDriver::connect(common, target).await?;
-        Ok(Self { driver, order_ids })
+        Ok(Self { driver, order_ids, target })
     }
 
-    pub fn next_order_id(&self) -> OrderId {
+    pub fn next_order_id(&mut self) -> Result<OrderId> {
         self.order_ids.next()
     }
 
-    pub fn send<M>(&mut self, msg: M) -> Result<()>
+    /// Send a message to the configured target.
+    pub fn send<M>(&self, msg: M) -> Result<()>
     where
-        M: std::fmt::Debug + Into<TypedMessage>,
+        M: Into<TypedMessage>,
     {
-        self.driver.send(Into::<TypedMessage>::into(msg));
-        Ok(())
+        self.driver.send_to(self.target, msg)
     }
 
-    pub async fn recv(&mut self) -> Result<Vec<Envelope<TypedMessage>>> {
-        self.driver.recv().await
-    }
-
-    /// Drive this receiver in a loop to continuously receive updates
-    pub async fn next(&mut self) -> Result<Vec<OrderflowMessage>> {
-        let mut updates = vec![];
-        let mut batch = self.recv().await?;
-        for env in batch.drain(..) {
-            debug!("received message: {:?}", env.msg);
-            if let Ok((_, msg)) =
-                TryInto::<MaybeSplit<TypedMessage, OrderflowMessage>>::try_into(
-                    env.msg.clone(),
-                )
-                .map(MaybeSplit::parts)
-            {
-                updates.push(msg);
-            } else {
-                warn!("ignoring message: {:?}", env.msg);
-            }
-        }
-        Ok(updates)
+    pub fn driver(&self) -> &ChannelDriver {
+        &self.driver
     }
 }

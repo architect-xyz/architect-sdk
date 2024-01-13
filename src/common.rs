@@ -1,10 +1,11 @@
 use crate::Paths;
 use anyhow::{Context, Result};
-use api::{symbology::CptyId, Config};
-use fxhash::FxHashMap;
+use api::{symbology::CptyId, ComponentId, Config};
+use fxhash::{FxHashMap, FxHashSet};
 use log::debug;
 use netidx::{
     config::Config as NetidxConfig,
+    path::Path,
     publisher::{BindCfg, Publisher, PublisherBuilder},
     subscriber::{DesiredAuth, Subscriber},
 };
@@ -61,13 +62,19 @@ impl Common {
             .build()
             .await?;
         debug!("creating subscriber");
-        let local_base = f.local_base;
-        let hosted_base = f.hosted_base;
+        let subscriber = Subscriber::new(netidx_config.clone(), desired_auth.clone())?;
+        let local_components: FxHashSet<ComponentId> =
+            f.local.keys().map(|k| *k).collect();
+        let mut remote_components: FxHashMap<ComponentId, Path> = FxHashMap::default();
+        for (path, coms) in f.remote.iter() {
+            for (com, _) in coms.iter() {
+                remote_components.insert(*com, path.clone());
+            }
+        }
         let mut marketdata_location_override = FxHashMap::default();
         for (k, v) in f.marketdata_location_override {
             marketdata_location_override.insert(CptyId::from_str(&k)?, v);
         }
-        let subscriber = Subscriber::new(netidx_config.clone(), desired_auth.clone())?;
         Ok(Self(Arc::new(CommonInner {
             config_path,
             config,
@@ -78,7 +85,15 @@ impl Common {
             publisher_slack: f.publisher_slack,
             publisher,
             subscriber,
-            paths: Paths { hosted_base, local_base, marketdata_location_override },
+            paths: Paths {
+                hosted_base: f.local_base,
+                local_base: f.hosted_base,
+                core_base: f.core_base,
+                local_components,
+                remote_components,
+                use_local_symbology: f.use_local_symbology,
+                marketdata_location_override,
+            },
         })))
     }
 
@@ -103,6 +118,29 @@ impl Common {
     /// Load from the default location
     pub async fn load_default() -> Result<Self> {
         Self::from_file(None::<&str>).await
+    }
+
+    pub fn find_local_component_of_kind(&self, kind: &str) -> Option<ComponentId> {
+        for (com, (k, _)) in self.config.local.iter() {
+            if k == kind {
+                return Some(*com);
+            }
+        }
+        None
+    }
+
+    pub fn find_component_of_kind(&self, kind: &str) -> Option<ComponentId> {
+        if let Some(com) = self.find_local_component_of_kind(kind) {
+            return Some(com);
+        }
+        for (_, coms) in self.config.remote.iter() {
+            for (com, k) in coms.iter() {
+                if k == kind {
+                    return Some(*com);
+                }
+            }
+        }
+        None
     }
 
     /// Convenience function to initialize symbology from [Common]

@@ -25,6 +25,7 @@ log = { workspace = true }
 md-5 = { workspace = true }
 netidx = { workspace = true }
 netidx-core = { workspace = true }
+netidx-derive = { workspace = true }
 netidx-protocols = { workspace = true }
 num_cpus = { workspace = true }
 once_cell = { workspace = true }

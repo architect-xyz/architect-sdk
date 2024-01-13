@@ -1,6 +1,6 @@
 use crate::symbology::Cpty;
-use api::{config::Location, symbology::CptyId};
-use fxhash::FxHashMap;
+use api::{config::Location, symbology::CptyId, ComponentId};
+use fxhash::{FxHashMap, FxHashSet};
 use netidx::path::Path;
 
 // CR alee: this begs the existence of a ComponentKind type
@@ -9,6 +9,10 @@ use netidx::path::Path;
 pub struct Paths {
     pub hosted_base: Path,
     pub local_base: Path,
+    pub core_base: Path,
+    pub local_components: FxHashSet<ComponentId>,
+    pub remote_components: FxHashMap<ComponentId, Path>,
+    pub use_local_symbology: bool,
     pub marketdata_location_override: FxHashMap<CptyId, Location>,
 }
 
@@ -24,7 +28,9 @@ impl Paths {
 
     /// Symbology server
     pub fn sym(&self) -> Path {
-        self.local_base.append("symbology")
+        let base =
+            if self.use_local_symbology { &self.local_base } else { &self.hosted_base };
+        base.append("symbology")
     }
 
     /// Marketdata feeds
@@ -78,8 +84,35 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
-    /// Core netidx interface
+    /// Core RPCs base path
     pub fn core(&self) -> Path {
-        self.local_base.append("core")
+        self.core_base.clone()
+    }
+
+    /// Channel for the core started by this config file
+    pub fn channel(&self) -> Path {
+        self.core_base.append("channel")
+    }
+
+    /// One-way write-only channel for core-to-core communication
+    pub fn in_channel(&self) -> Path {
+        self.core_base.append("in-channel")
+    }
+
+    /// Find the most direct channel for a given component
+    pub fn component(&self, com: ComponentId) -> Option<Path> {
+        let channel_base = if self.local_components.contains(&com) {
+            Some(&self.core_base)
+        } else if let Some(base) = self.remote_components.get(&com) {
+            Some(base)
+        } else {
+            None
+        };
+        channel_base.map(|base| base.append("channel"))
+    }
+
+    /// UserDB (licensing, registration, etc.)
+    pub fn userdb(&self) -> Path {
+        self.hosted_base.append("userdb")
     }
 }

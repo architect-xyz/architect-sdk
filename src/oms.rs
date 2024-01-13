@@ -22,11 +22,13 @@ impl OmsClient {
     /// for a "ChannelAuthority" component in the config.
     pub async fn connect(
         common: &Common,
-        channel_authority: Option<ComponentId>,
+        order_authority: Option<ComponentId>,
+        order_id_range: Option<u64>,
         target: Option<ComponentId>,
     ) -> Result<Self> {
         let orderflow =
-            OrderflowClient::connect(common, channel_authority, target).await?;
+            OrderflowClient::connect(common, order_authority, order_id_range, target)
+                .await?;
         Ok(Self {
             orderflow,
             last_order_update: FxHashMap::default(),
@@ -48,7 +50,7 @@ impl OmsClient {
     /// Drive this receiver in a loop to continuously update the state of orders
     pub async fn next(&mut self) -> Result<Vec<OmsOrderUpdate>> {
         let mut updates = vec![];
-        let mut batch = self.orderflow.recv().await?;
+        let mut batch = self.orderflow.driver().recv().await?;
         let now = Utc::now();
         for env in batch.drain(..) {
             debug!("received message: {:?}", env.msg);
