@@ -37,14 +37,13 @@ impl BookClient {
     /// an id that matches the id of this subscription.
     pub fn new(
         subscriber: &Subscriber,
-        base_path: &Path,
+        path: &Path,
         _display: bool,
         market: Market,
         up: mpsc::Sender<Pooled<Vec<(SubId, Event)>>>,
     ) -> Self {
         // let base =
         //     common.paths.qf_rt(Some(Cpty { venue: Some(tp.venue), route: tp.route }));
-        let path = market.path_by_name(base_path).append("book");
         let already = subscriber.is_subscribed_or_pending(&path);
         // let subscription = if display {
         //     common
@@ -52,7 +51,7 @@ impl BookClient {
         //         .subscribe_updates(path, [(UpdatesFlags::empty(), up)])
         // } else {
         let subscription =
-            subscriber.subscribe_updates(path, [(UpdatesFlags::empty(), up)]);
+            subscriber.subscribe_updates(path.clone(), [(UpdatesFlags::empty(), up)]);
         // };
         if already || subscription.strong_count() > 1 {
             // if we are already subscribed then we need to ask for a
@@ -136,7 +135,8 @@ impl ConsolidatedBookClient {
     ) -> Self {
         let mut books: FxHashMap<SubId, (Market, BookClient)> = FxHashMap::default();
         markets.iter().for_each(|m| {
-            let client = BookClient::new(subscriber, base_path, display, *m, up.clone());
+            let path = m.path_by_name(base_path).append("book");
+            let client = BookClient::new(subscriber, &path, display, *m, up.clone());
             books.insert(client.id(), (*m, client));
         });
         Self { consolidated_book: ConsolidatedLevelBook::default(), books }
