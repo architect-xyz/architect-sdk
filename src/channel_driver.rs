@@ -61,19 +61,28 @@ impl ChannelDriver {
         Ok(messages)
     }
 
-    /// Send message to a component and wait for a response that satisfies `f`.
-    /// Ignores and discards any intervening messages.
-    pub async fn send_to_and_wait_for<M, R, T>(
-        &mut self,
-        dst: ComponentId,
-        msg: M,
-        mut f: impl FnMut(R) -> Option<T>,
-    ) -> Result<T>
+    /// Wait for a message that satisfies predicate `f`.
+    /// The dumber version of [wait_for].
+    pub async fn wait_until<R>(&self, mut f: impl FnMut(R) -> bool) -> Result<()>
     where
-        M: Into<TypedMessage>,
         TypedMessage: TryInto<MaybeSplit<TypedMessage, R>>,
     {
-        self.send_to(dst, msg)?;
+        while let Ok(env) = self.channel.recv_one::<Envelope<TypedMessage>>().await {
+            if let Ok((_orig, msg)) = env.msg.try_into().map(MaybeSplit::parts) {
+                if f(msg) {
+                    return Ok(());
+                }
+            }
+        }
+        Err(anyhow!("lost connection to component channel"))
+    }
+
+    /// Wait for a response that satisfies `f`.
+    /// Ignores and discards any intervening messages.
+    pub async fn wait_for<R, T>(&self, mut f: impl FnMut(R) -> Option<T>) -> Result<T>
+    where
+        TypedMessage: TryInto<MaybeSplit<TypedMessage, R>>,
+    {
         while let Ok(env) = self.channel.recv_one::<Envelope<TypedMessage>>().await {
             if let Ok((_orig, msg)) = env.msg.try_into().map(MaybeSplit::parts) {
                 if let Some(t) = f(msg) {
@@ -86,12 +95,28 @@ impl ChannelDriver {
         Err(anyhow!("lost connection to component channel"))
     }
 
+    /// Send message to a component and wait for a response that satisfies `f`.
+    /// Ignores and discards any intervening messages.
+    pub async fn send_to_and_wait_for<M, R, T>(
+        &self,
+        dst: ComponentId,
+        msg: M,
+        f: impl FnMut(R) -> Option<T>,
+    ) -> Result<T>
+    where
+        M: Into<TypedMessage>,
+        TypedMessage: TryInto<MaybeSplit<TypedMessage, R>>,
+    {
+        self.send_to(dst, msg)?;
+        self.wait_for(f).await
+    }
+
     /// Send a request to a component and wait for the corresponding response.  Calls the
     /// provided `unwrap` function on the response and returns the result.
     ///
     /// Ignores and discards any intervening messages.
     pub async fn request_and_wait_for<M, R, T>(
-        &mut self,
+        &self,
         dst: ComponentId,
         msg: M,
         unwrap: impl Fn(R) -> Result<T>,

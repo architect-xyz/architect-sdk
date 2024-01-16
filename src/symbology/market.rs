@@ -143,7 +143,7 @@ impl From<MarketKind> for api::symbology::MarketKind {
 }
 
 /// Derivation of `api::symbology::ExchangeMarketKind` where ids are replaced with StaticRef's.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ExchangeMarketKind {
     pub base: Product,
     pub quote: Product,
