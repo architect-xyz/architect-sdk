@@ -13,6 +13,7 @@ pub struct Paths {
     pub local_components: FxHashSet<ComponentId>,
     pub remote_components: FxHashMap<ComponentId, Path>,
     pub use_local_symbology: bool,
+    pub use_local_userdb: bool,
     pub marketdata_location_override: FxHashMap<CptyId, Location>,
 }
 
@@ -113,6 +114,8 @@ impl Paths {
 
     /// UserDB (licensing, registration, etc.)
     pub fn userdb(&self) -> Path {
-        self.hosted_base.append("userdb")
+        let base =
+            if self.use_local_userdb { &self.local_base } else { &self.hosted_base };
+        base.append("userdb")
     }
 }

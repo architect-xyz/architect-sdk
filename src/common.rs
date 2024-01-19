@@ -86,12 +86,13 @@ impl Common {
             publisher,
             subscriber,
             paths: Paths {
-                hosted_base: f.local_base,
-                local_base: f.hosted_base,
+                hosted_base: f.hosted_base,
+                local_base: f.local_base,
                 core_base: f.core_base,
                 local_components,
                 remote_components,
                 use_local_symbology: f.use_local_symbology,
+                use_local_userdb: f.use_local_userdb,
                 marketdata_location_override,
             },
         })))
