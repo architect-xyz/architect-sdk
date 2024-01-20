@@ -1,5 +1,5 @@
 use crate::Paths;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use api::{symbology::CptyId, ComponentId, Config};
 use fxhash::{FxHashMap, FxHashSet};
 use log::debug;
@@ -9,6 +9,7 @@ use netidx::{
     publisher::{BindCfg, Publisher, PublisherBuilder},
     subscriber::{DesiredAuth, Subscriber},
 };
+use openssl::{pkey::Private, rsa::Rsa, x509::X509};
 use std::{fs, ops::Deref, path::PathBuf, str::FromStr, sync::Arc};
 use tokio::task;
 
@@ -119,6 +120,46 @@ impl Common {
     /// Load from the default location
     pub async fn load_default() -> Result<Self> {
         Self::from_file(None::<&str>).await
+    }
+
+    /// Get the architect tls identity
+    pub fn get_tls_identity(
+        &self,
+    ) -> Result<(&netidx::config::Tls, &netidx::config::TlsIdentity)> {
+        let tls =
+            self.netidx_config.tls.as_ref().ok_or_else(|| anyhow!("no tls config"))?;
+        let identity = tls
+            .identities
+            .get("xyz.architect.")
+            .ok_or_else(|| anyhow!("architect.xyz identity not found"))?;
+        Ok((tls, identity))
+    }
+
+    /// Load and decrypt the private key from the configured identity
+    /// Note this does blocking operations, so within an async context
+    /// call it with block_in_place
+    pub fn load_private_key(&self) -> Result<Rsa<Private>> {
+        let (tls, identity) = self.get_tls_identity()?;
+        let pem = fs::read(&identity.private_key)?;
+        match Rsa::private_key_from_pem(&pem) {
+            Ok(pkey) => Ok(pkey),
+            Err(_) => {
+                // try password-protected
+                let password = netidx::tls::load_key_password(
+                    tls.askpass.as_ref().map(|s| s.as_str()),
+                    &identity.private_key,
+                )?;
+                Ok(Rsa::private_key_from_pem_passphrase(&pem, password.as_bytes())?)
+            }
+        }
+    }
+
+    /// Load the public key/certificate from the configured
+    /// identity. Note this does blocking operations, so within an
+    /// async context call it with block_in_place
+    pub fn load_certificate(&self) -> Result<X509> {
+        let (_, identity) = self.get_tls_identity()?;
+        Ok(X509::from_pem(&fs::read(&identity.certificate)?)?)
     }
 
     pub fn find_local_component_of_kind(&self, kind: &str) -> Option<ComponentId> {
