@@ -1,10 +1,14 @@
-use crate::{symbology::{self, static_ref::StaticRef, Cpty, Market}, Common};
 use super::utils::{
     apply_oneshot, legacy_hist_ohlc_path_by_name, legacy_ohlc_path_by_name,
 };
+use crate::{
+    symbology::{self, static_ref::StaticRef, Cpty, Market},
+    Common,
+};
 use anyhow::{anyhow, Result};
 use api::{
-    marketdata::{CandleV1, CandleWidth, NetidxFeedPaths}, symbology::MarketId,
+    marketdata::{CandleV1, CandleWidth, NetidxFeedPaths},
+    symbology::MarketId,
 };
 use chrono::{DateTime, Utc};
 use netidx::{
@@ -46,6 +50,7 @@ pub async fn get(
 ) -> Result<Vec<CandleV1>> {
     let market =
         symbology::Market::get_by_id(&id).ok_or_else(|| anyhow!("unknown market"))?;
+    log::warn!("{} {:?} from {} to {}", market.name, width, start, end);
     let live_base = live_candles_base_path(common, market.clone());
     let recorder_base = recorder_base_path(common, market);
     let recorder_client =
@@ -63,7 +68,8 @@ pub async fn get_from_recorder(
     let mut candles: Vec<CandleV1> = vec![];
     // CR alee: ** is a bit of a hack to include .lagging if possible from the blockchain QFs
     // we should unwind this degeneracy immediately/asap
-    let filter = format!("{live_candles_base_path}/**/finalized/{}/candle_v1", width.as_str());
+    let filter =
+        format!("{live_candles_base_path}/**/finalized/{}/candle_v1", width.as_str());
     let filter = Glob::new(Chars::from(filter))?;
     let filter = GlobSet::new(true, std::iter::once(filter))?;
     apply_oneshot(recorder_client, Some(start), Some(end), &filter, |_, up| {
