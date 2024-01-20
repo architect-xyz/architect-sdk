@@ -85,6 +85,10 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
+    pub fn marketdata_marks(&self) -> Path {
+        self.local_base.append("qf").append("marks")
+    }
+
     /// Core RPCs base path
     pub fn core(&self) -> Path {
         self.core_base.clone()

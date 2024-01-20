@@ -24,6 +24,7 @@ itertools = { workspace = true }
 log = { workspace = true }
 md-5 = { workspace = true }
 netidx = { workspace = true }
+netidx-archive = { workspace = true }
 netidx-core = { workspace = true }
 netidx-derive = { workspace = true }
 netidx-protocols = { workspace = true }
