@@ -1,6 +1,6 @@
 /// Subscribe to book data
-use super::{consolidated_level_book::ConsolidatedLevelBook, level_book::LevelBook};
-use crate::symbology::Market;
+use super::{consolidated_level_book::ConsolidatedLevelBook, level_book::LevelBook, utils::legacy_marketdata_path_by_name};
+use crate::{symbology::{Market, Cpty}, Common};
 use anyhow::{anyhow, bail, Result};
 use api::marketdata::{MessageHeader, NetidxFeedPaths, Snapshot, Updates};
 use futures::channel::mpsc;
@@ -171,5 +171,15 @@ impl ConsolidatedBookClient {
             e => bail!("book protocol error, invalid event {:?}", e),
         }
         Ok(())
+    }
+}
+
+pub fn book_path(common: &Common, market: Market) -> Path {
+    let cpty = Cpty { venue: market.venue, route: market.route };
+    if common.config.use_legacy_marketdata_paths {
+        let base_path = common.paths.marketdata(cpty);
+        legacy_marketdata_path_by_name(base_path, market).append("book")
+    } else {
+        market.path_by_name(&common.paths.marketdata_rt(cpty)).append("book")
     }
 }
