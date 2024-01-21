@@ -1,9 +1,8 @@
+use crate::symbology::{self, Market};
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use netidx::{path::Path, resolver_client::GlobSet, subscriber::Event};
 use rust_decimal::Decimal;
-
-use crate::symbology::{Market, self};
 
 pub fn legacy_marketdata_path_by_name(base_path: Path, market: Market) -> Path {
     match market.kind {
@@ -81,4 +80,3 @@ pub async fn apply_oneshot<F: FnMut(netidx_archive::logfile::Id, Event) -> ()>(
     }
     Ok(())
 }
-

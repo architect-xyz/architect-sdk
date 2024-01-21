@@ -50,7 +50,7 @@ pub async fn get(
 ) -> Result<Vec<CandleV1>> {
     let market =
         symbology::Market::get_by_id(&id).ok_or_else(|| anyhow!("unknown market"))?;
-    log::warn!("{} {:?} from {} to {}", market.name, width, start, end);
+    log::info!("{} {:?} from {} to {}", market.name, width, start, end);
     let live_base = live_candles_base_path(common, market.clone());
     let recorder_base = recorder_base_path(common, market);
     let recorder_client =
