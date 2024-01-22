@@ -1,6 +1,12 @@
 /// Subscribe to book data
-use super::{consolidated_level_book::ConsolidatedLevelBook, level_book::LevelBook, utils::legacy_marketdata_path_by_name};
-use crate::{symbology::{Market, Cpty}, Common};
+use super::{
+    consolidated_level_book::ConsolidatedLevelBook, level_book::LevelBook,
+    utils::legacy_marketdata_path_by_name,
+};
+use crate::{
+    symbology::{Cpty, Market},
+    Common,
+};
 use anyhow::{anyhow, bail, Result};
 use api::marketdata::{MessageHeader, NetidxFeedPaths, Snapshot, Updates};
 use futures::channel::mpsc;
