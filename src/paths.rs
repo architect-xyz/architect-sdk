@@ -31,7 +31,7 @@ impl Paths {
     pub fn sym(&self) -> Path {
         let base =
             if self.use_local_symbology { &self.local_base } else { &self.hosted_base };
-        base.append("symbology")
+        base.append("sym")
     }
 
     /// Marketdata feeds
