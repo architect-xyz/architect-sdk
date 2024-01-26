@@ -22,6 +22,7 @@ use parking_lot::Mutex;
 use portable_atomic::Ordering;
 use std::{
     ops::Deref,
+    str::FromStr,
     sync::{atomic::AtomicUsize, Arc},
 };
 
@@ -94,6 +95,14 @@ pub trait StaticRef<T: Symbolic, const SLAB_SIZE: usize>:
     /// This is O(log(N)) where N is the total number of symbols in the set.
     fn get_by_id(id: &T::Id) -> Option<Self> {
         Self::by_id().load().get(id).copied()
+    }
+
+    /// Look up a symbol by name or id.
+    fn get_by_name_or_id(s: &str) -> Option<Self> {
+        Self::get(s).or_else(|| {
+            let id = T::Id::from_str(s).ok()?;
+            Self::get_by_id(&id)
+        })
     }
 
     /// Get a map of all symbols indexed by name. This is O(1)

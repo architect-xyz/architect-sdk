@@ -206,30 +206,31 @@ impl MarketIndex {
             }
             Query::Not(term) => self.all.diff(&self.query_(term)),
             Query::All => self.all.clone(),
-            Query::Base(s) => Product::get(s).map_or_else(Set::new, |p| {
+            Query::Base(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
                 self.by_base.get(&p).cloned().unwrap_or_else(Set::new)
             }),
             Query::BaseKind(s) => {
                 self.by_base_kind.get(s).cloned().unwrap_or_else(Set::new)
             }
-            Query::Quote(s) => Product::get(s).map_or_else(Set::new, |p| {
+            Query::Quote(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
                 self.by_quote.get(&p).cloned().unwrap_or_else(Set::new)
             }),
-            Query::Pool(s) => Product::get(s).map_or_else(Set::new, |p| {
+            Query::Pool(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
                 self.by_pool_has.get(&p).cloned().unwrap_or_else(Set::new)
             }),
-            Query::Route(s) => Route::get(s).map_or_else(Set::new, |r| {
+            Query::Route(s) => Route::get_by_name_or_id(s).map_or_else(Set::new, |r| {
                 self.by_route.get(&r).cloned().unwrap_or_else(Set::new)
             }),
-            Query::Venue(s) => Venue::get(s).map_or_else(Set::new, |v| {
+            Query::Venue(s) => Venue::get_by_name_or_id(s).map_or_else(Set::new, |v| {
                 self.by_venue.get(&v).cloned().unwrap_or_else(Set::new)
             }),
             Query::ExchangeSymbol(s) => {
                 self.by_exchange_symbol.get(s).cloned().unwrap_or_else(Set::new)
             }
-            Query::Underlying(s) => Product::get(s).map_or_else(Set::new, |p| {
-                self.by_underlying.get(&p).cloned().unwrap_or_else(Set::new)
-            }),
+            Query::Underlying(s) => Product::get_by_name_or_id(s)
+                .map_or_else(Set::new, |p| {
+                    self.by_underlying.get(&p).cloned().unwrap_or_else(Set::new)
+                }),
             Query::Expired => {
                 let now = Utc::now();
                 let res: Set<Market> = self
