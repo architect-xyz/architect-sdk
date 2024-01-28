@@ -84,8 +84,6 @@ impl RfqClient {
                 .common
                 .paths
                 .marketdata_api(cpty)
-                .append(venue.name.as_str())
-                .append(route.name.as_str())
                 .append("subscribe-rfq");
             let proc = Proc::new_with_timeout(
                 &self.common.subscriber,
