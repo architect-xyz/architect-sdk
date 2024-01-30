@@ -101,6 +101,10 @@ pub struct MarketInner {
 impl Symbolic for MarketInner {
     type Id = MarketId;
 
+    fn type_name() -> &'static str {
+        "market"
+    }
+
     fn id(&self) -> Self::Id {
         self.id
     }

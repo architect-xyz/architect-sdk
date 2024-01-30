@@ -1,5 +1,10 @@
-use crate::symbology::Cpty;
-use api::{config::Location, symbology::CptyId, ComponentId};
+use crate::{
+    marketdata::utils::legacy_marketdata_path_by_name,
+    symbology::{Cpty, Market},
+};
+use api::{
+    config::Location, marketdata::NetidxFeedPaths, symbology::CptyId, ComponentId,
+};
 use fxhash::{FxHashMap, FxHashSet};
 use netidx::path::Path;
 
@@ -14,6 +19,10 @@ pub struct Paths {
     pub remote_components: FxHashMap<ComponentId, Path>,
     pub use_local_symbology: bool,
     pub use_local_userdb: bool,
+    // TODO: probably sinter these into
+    // marketdata_base_path_override
+    // use_legacy_marketdata: Vec<CptyId> or Star...make a Star<T> type
+    pub use_legacy_marketdata_paths: bool,
     pub marketdata_location_override: FxHashMap<CptyId, Location>,
 }
 
@@ -50,6 +59,18 @@ impl Paths {
             .append("rt")
             .append(&cpty.venue.name)
             .append(&cpty.route.name)
+    }
+
+    /// Realtime marketdata book
+    pub fn marketdata_rt_book(&self, market: Market) -> Path {
+        let cpty = Cpty { venue: market.venue, route: market.route };
+        if self.use_legacy_marketdata_paths {
+            let base_path = self.marketdata(cpty);
+            legacy_marketdata_path_by_name(base_path, market).append("book")
+        } else {
+            let base_path = self.marketdata_rt(cpty);
+            market.path_by_name(&base_path).append("book")
+        }
     }
 
     /// Realtime marketdata candles

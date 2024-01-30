@@ -4,6 +4,8 @@ use chrono::{DateTime, Utc};
 use netidx::{path::Path, resolver_client::GlobSet, subscriber::Event};
 use rust_decimal::Decimal;
 
+// TODO: maybe deprecate these or move these to common
+
 pub fn legacy_marketdata_path_by_name(base_path: Path, market: Market) -> Path {
     match market.kind {
         symbology::MarketKind::Exchange(symbology::market::ExchangeMarketKind {

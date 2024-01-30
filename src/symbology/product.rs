@@ -49,6 +49,10 @@ pub struct ProductInner {
 impl Symbolic for ProductInner {
     type Id = ProductId;
 
+    fn type_name() -> &'static str {
+        "product"
+    }
+
     fn id(&self) -> Self::Id {
         self.id
     }

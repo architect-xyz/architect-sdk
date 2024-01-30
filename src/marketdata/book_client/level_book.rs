@@ -13,6 +13,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+// CR alee: probably want to rethink where to put these
 pub trait LevelLike {
     fn price(&self) -> Decimal;
     fn size(&self) -> Decimal;

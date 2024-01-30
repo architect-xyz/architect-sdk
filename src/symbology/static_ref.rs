@@ -91,10 +91,21 @@ pub trait StaticRef<T: Symbolic, const SLAB_SIZE: usize>:
         Self::by_name().load().get(s).copied()
     }
 
+    /// Same as [get] but returns a result.
+    fn find(s: &str) -> Result<Self, anyhow::Error> {
+        Self::get(s).ok_or_else(|| anyhow::anyhow!("missing {}: {}", T::type_name(), s))
+    }
+
     /// Look up a symbol by id.
     /// This is O(log(N)) where N is the total number of symbols in the set.
     fn get_by_id(id: &T::Id) -> Option<Self> {
         Self::by_id().load().get(id).copied()
+    }
+
+    /// Same as [get_by_id] but returns a result.
+    fn find_by_id(id: &T::Id) -> Result<Self, anyhow::Error> {
+        Self::get_by_id(id)
+            .ok_or_else(|| anyhow::anyhow!("missing {}: {}", T::type_name(), id))
     }
 
     /// Look up a symbol by name or id.

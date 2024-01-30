@@ -9,5 +9,6 @@ pub mod symbology;
 
 pub use channel_driver::ChannelDriver;
 pub use common::Common;
+pub use marketdata::managed_marketdata::ManagedMarketdata;
 pub use order_id_allocator::OrderIdAllocator;
 pub use paths::Paths;

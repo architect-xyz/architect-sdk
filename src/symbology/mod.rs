@@ -1,6 +1,6 @@
 use crate::static_ref;
 use allocator::StaticBumpAllocator;
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use api::{
     symbology::{CptyId, Symbolic},
     Str,
@@ -65,10 +65,22 @@ impl Cpty {
         }
     }
 
+    pub fn find(s: &str) -> Result<Self> {
+        Self::get(s).ok_or_else(|| anyhow!("missing cpty: {}", s))
+    }
+
     pub fn get_by_id(id: &CptyId) -> Option<Self> {
         let venue = Venue::get_by_id(&id.venue)?;
         let route = Route::get_by_id(&id.route)?;
         Some(Self { venue, route })
+    }
+
+    pub fn find_by_id(id: &CptyId) -> Result<Self> {
+        Self::get_by_id(id).ok_or_else(|| anyhow!("missing cpty: {}", id))
+    }
+
+    pub fn name(&self) -> String {
+        format!("{}/{}", self.venue.name, self.route.name)
     }
 }
 

@@ -1,14 +1,13 @@
-/// Subscribe to book data
-use super::{
-    consolidated_level_book::ConsolidatedLevelBook, level_book::LevelBook,
-    utils::legacy_marketdata_path_by_name,
-};
+//! Subscribe to book data
+
+use super::utils::legacy_marketdata_path_by_name;
 use crate::{
     symbology::{Cpty, Market},
     Common,
 };
 use anyhow::{anyhow, bail, Result};
 use api::marketdata::{MessageHeader, NetidxFeedPaths, Snapshot, Updates};
+use consolidated_level_book::ConsolidatedLevelBook;
 use futures::channel::mpsc;
 use fxhash::FxHashMap;
 use log::trace;
@@ -18,7 +17,27 @@ use netidx::{
     pool::Pooled,
     subscriber::{Dval, Event, SubId, Subscriber, UpdatesFlags, Value},
 };
-use std::ops::Deref;
+use std::{ops::Deref, time::Duration};
+use tokio::sync::watch;
+
+pub mod consolidated_level_book;
+pub mod level_book;
+pub use level_book::*;
+
+pub struct Synced(watch::Receiver<bool>);
+
+impl Synced {
+    pub async fn wait_synced(&mut self, timeout: Option<Duration>) -> Result<()> {
+        if let Some(timeout) = timeout {
+            if let Err(_) = tokio::time::timeout(timeout, self.0.wait_for(|v| *v)).await {
+                bail!("timed out waiting for book to sync");
+            }
+        } else {
+            self.0.wait_for(|v| *v).await?;
+        }
+        Ok(())
+    }
+}
 
 /// A subscription to book data
 pub struct BookClient {
@@ -26,6 +45,7 @@ pub struct BookClient {
     market: Market,
     subscription: Dval,
     synced: bool,
+    tx_synced: watch::Sender<bool>,
 }
 
 impl Deref for BookClient {
@@ -64,7 +84,9 @@ impl BookClient {
             // snapshot manually
             subscription.write(Value::Null);
         }
-        Self { book: LevelBook::default(), market, subscription, synced: false }
+        let synced = false;
+        let (tx_synced, _) = watch::channel(synced);
+        Self { book: LevelBook::default(), market, subscription, synced, tx_synced }
     }
 
     /// Return the id of this subscription
@@ -82,6 +104,10 @@ impl BookClient {
 
     pub fn synced(&self) -> bool {
         self.synced
+    }
+
+    pub fn subscribe_synced(&self) -> Synced {
+        Synced(self.tx_synced.subscribe())
     }
 
     /// Process the specified book event, updating the book with it's
@@ -102,6 +128,7 @@ impl BookClient {
                         let snap: Snapshot = Pack::decode(&mut buf)?;
                         trace!("book snap: {:?}", snap);
                         self.synced = true;
+                        self.tx_synced.send_replace(true);
                         self.book.update_from_snapshot(snap)
                     }
                 }

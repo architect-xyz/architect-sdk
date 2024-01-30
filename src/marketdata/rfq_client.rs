@@ -80,11 +80,7 @@ impl RfqClient {
     ) -> Result<()> {
         if !self.index.contains_key(&(venue, route, rfq)) || !reuse_existing {
             let cpty = Cpty { venue, route };
-            let api_path = self
-                .common
-                .paths
-                .marketdata_api(cpty)
-                .append("subscribe-rfq");
+            let api_path = self.common.paths.marketdata_api(cpty).append("subscribe-rfq");
             let proc = Proc::new_with_timeout(
                 &self.common.subscriber,
                 api_path,

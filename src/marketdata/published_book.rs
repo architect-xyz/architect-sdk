@@ -1,6 +1,6 @@
 // CR alee: this might be deprecated/unused
 
-use super::level_book::{LevelBook, LevelLike};
+use super::book_client::level_book::{LevelBook, LevelLike};
 use crate::symbology::Market;
 use anyhow::Result;
 use api::{

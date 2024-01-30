@@ -1,5 +1,5 @@
 use crate::Paths;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use api::{symbology::CptyId, ComponentId, Config};
 use fxhash::{FxHashMap, FxHashSet};
 use log::debug;
@@ -94,6 +94,7 @@ impl Common {
                 remote_components,
                 use_local_symbology: f.use_local_symbology,
                 use_local_userdb: f.use_local_userdb,
+                use_legacy_marketdata_paths: f.use_legacy_marketdata_paths,
                 marketdata_location_override,
             },
         })))
@@ -135,22 +136,44 @@ impl Common {
         Ok((tls, identity))
     }
 
+    // CR-someday alee: switch all of this to rustls?
     /// Load and decrypt the private key from the configured identity
     /// Note this does blocking operations, so within an async context
     /// call it with block_in_place
     pub fn load_private_key(&self) -> Result<Rsa<Private>> {
+        use pkcs8::{
+            der::{pem::PemLabel, zeroize::Zeroize},
+            EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
+        };
         let (tls, identity) = self.get_tls_identity()?;
-        let pem = fs::read(&identity.private_key)?;
-        match Rsa::private_key_from_pem(&pem) {
-            Ok(pkey) => Ok(pkey),
-            Err(_) => {
-                // try password-protected
-                let password = netidx::tls::load_key_password(
-                    tls.askpass.as_ref().map(|s| s.as_str()),
-                    &identity.private_key,
-                )?;
-                Ok(Rsa::private_key_from_pem_passphrase(&pem, password.as_bytes())?)
+        let path = &identity.private_key;
+        debug!("reading key from {}", path);
+        let pem = fs::read_to_string(&path)?;
+        let (label, doc) = match SecretDocument::from_pem(&pem) {
+            Ok((label, doc)) => (label, doc),
+            Err(e) => bail!("failed to load pem {}, error: {}", path, e),
+        };
+        debug!("key label is {}", label);
+        if label == EncryptedPrivateKeyInfo::PEM_LABEL {
+            if !EncryptedPrivateKeyInfo::try_from(doc.as_bytes()).is_ok() {
+                bail!("encrypted key malformed")
             }
+            debug!("decrypting key");
+            // try password-protected
+            let mut password = netidx::tls::load_key_password(
+                tls.askpass.as_ref().map(|s| s.as_str()),
+                &path,
+            )?;
+            let pkey = Rsa::private_key_from_pem_passphrase(
+                pem.as_bytes(),
+                password.as_bytes(),
+            )?;
+            password.zeroize();
+            Ok(pkey)
+        } else if label == PrivateKeyInfo::PEM_LABEL {
+            Ok(Rsa::private_key_from_pem(pem.as_bytes())?)
+        } else {
+            bail!("unknown key type")
         }
     }
 
