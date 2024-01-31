@@ -3,6 +3,23 @@ use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use netidx::{path::Path, resolver_client::GlobSet, subscriber::Event};
 use rust_decimal::Decimal;
+use std::time::Duration;
+use tokio::sync::watch;
+
+pub struct Synced(pub watch::Receiver<bool>);
+
+impl Synced {
+    pub async fn wait_synced(&mut self, timeout: Option<Duration>) -> Result<()> {
+        if let Some(timeout) = timeout {
+            if let Err(_) = tokio::time::timeout(timeout, self.0.wait_for(|v| *v)).await {
+                bail!("timed out waiting for book to sync");
+            }
+        } else {
+            self.0.wait_for(|v| *v).await?;
+        }
+        Ok(())
+    }
+}
 
 // TODO: maybe deprecate these or move these to common
 

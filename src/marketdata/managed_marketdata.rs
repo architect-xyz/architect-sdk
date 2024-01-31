@@ -4,35 +4,63 @@
 //! easier, more efficient interface than trying to manually juggle a bunch of
 //! `BookClient`s.
 
-use super::book_client::{BookClient, Synced};
-use crate::{symbology::Market, Common};
+use super::book_client::BookClient;
+use crate::{
+    marketdata::utils::Synced,
+    symbology::{Cpty, Market, MarketKind},
+    Common,
+};
+use anyhow::{bail, Result};
+use api::marketdata::{RfqRequest, RfqResponse};
 use futures::channel::mpsc;
 use futures_util::StreamExt;
 use fxhash::FxHashMap;
 use log::{error, warn};
 use netidx::{
     pool::Pooled,
-    subscriber::{Event, SubId},
+    subscriber::{Dval, Event, SubId, UpdatesFlags, Value},
 };
+use netidx_protocols::{call_rpc, rpc::client::Proc};
+use rust_decimal::Decimal;
 use std::{
     sync::{Arc, Weak},
     time::Duration,
 };
 use tokio::{
-    sync::Mutex,
+    sync::{watch, Mutex},
     task::{self, JoinHandle},
 };
 
 pub struct ManagedMarketdata {
     book_handles: Arc<Mutex<BookHandles>>,
+    rfq_handles: Arc<Mutex<RfqHandles>>,
     common: Common,
     _subscription_driver: Option<JoinHandle<()>>,
     subscription_tx: mpsc::Sender<Pooled<Vec<(SubId, Event)>>>,
 }
 
+// CR alee: periodically garbage collect weaks that have been dropped
 pub struct BookHandles {
     by_market: FxHashMap<Market, Weak<Mutex<BookClient>>>,
     by_sub_id: FxHashMap<SubId, Weak<Mutex<BookClient>>>,
+}
+
+pub struct RfqHandles {
+    by_rfq: FxHashMap<(Cpty, RfqRequest), Weak<Mutex<RfqResponseHandle>>>,
+    by_sub_id: FxHashMap<SubId, Weak<Mutex<RfqResponseHandle>>>,
+}
+
+pub struct RfqResponseHandle {
+    sub: Option<Dval>,
+    synced: bool,
+    tx_synced: watch::Sender<bool>,
+    pub last_rfq_response: Option<RfqResponse>,
+}
+
+impl RfqResponseHandle {
+    pub fn subscribe_synced(&self) -> Synced {
+        Synced(self.tx_synced.subscribe())
+    }
 }
 
 impl ManagedMarketdata {
@@ -41,12 +69,18 @@ impl ManagedMarketdata {
             by_market: FxHashMap::default(),
             by_sub_id: FxHashMap::default(),
         }));
+        let rfq_handles = Arc::new(Mutex::new(RfqHandles {
+            by_rfq: FxHashMap::default(),
+            by_sub_id: FxHashMap::default(),
+        }));
         let (tx, mut rx) = mpsc::channel::<Pooled<Vec<(SubId, Event)>>>(10000);
         let handle = {
             let book_handles = book_handles.clone();
+            let rfq_handles = rfq_handles.clone();
             let f = async move {
                 'outer: while let Some(mut batch) = rx.next().await {
                     let mut book_handles = book_handles.lock().await;
+                    let mut rfq_handles = rfq_handles.lock().await;
                     for (id, event) in batch.drain(..) {
                         if let Some(book) =
                             book_handles.by_sub_id.get_mut(&id).and_then(|w| w.upgrade())
@@ -54,6 +88,31 @@ impl ManagedMarketdata {
                             if let Err(e) = book.lock().await.process_event(event) {
                                 error!("error processing book event: {}", e);
                                 break 'outer;
+                            }
+                        } else if let Some(rfq) =
+                            rfq_handles.by_sub_id.get_mut(&id).and_then(|w| w.upgrade())
+                        {
+                            match event {
+                                // CR alee: should we do something here?
+                                Event::Unsubscribed => {}
+                                Event::Update(Value::Null) => {}
+                                Event::Update(v) => {
+                                    match serde_json::from_str::<RfqResponse>(
+                                        v.to_string_naked().as_str(),
+                                    ) {
+                                        Ok(r) => {
+                                            let mut rfq = rfq.lock().await;
+                                            rfq.last_rfq_response = Some(r);
+                                            if !rfq.synced {
+                                                rfq.synced = true;
+                                                rfq.tx_synced.send_replace(true);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!("failed to parse RFQ response: {e}",)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -67,6 +126,7 @@ impl ManagedMarketdata {
         };
         Self {
             book_handles,
+            rfq_handles,
             common,
             _subscription_driver: Some(handle),
             subscription_tx: tx,
@@ -78,6 +138,10 @@ impl ManagedMarketdata {
         Self {
             book_handles: Arc::new(Mutex::new(BookHandles {
                 by_market: FxHashMap::default(),
+                by_sub_id: FxHashMap::default(),
+            })),
+            rfq_handles: Arc::new(Mutex::new(RfqHandles {
+                by_rfq: FxHashMap::default(),
                 by_sub_id: FxHashMap::default(),
             })),
             common,
@@ -108,6 +172,63 @@ impl ManagedMarketdata {
         book_handles.by_market.insert(market, Arc::downgrade(&book_client));
         book_handles.by_sub_id.insert(sub_id, Arc::downgrade(&book_client));
         (book_client, synced)
+    }
+
+    pub async fn subscribe_rfq(
+        &self,
+        market: Market,
+        qty: Decimal,
+    ) -> Result<(Arc<Mutex<RfqResponseHandle>>, Synced)> {
+        let cpty = Cpty { venue: market.venue, route: market.route };
+        let (base, quote) = match market.kind {
+            MarketKind::Exchange(k) => (k.base, k.quote),
+            _ => bail!("unsupported market kind"),
+        };
+        let rfq = RfqRequest { base: base.id, quote: quote.id, quantity: qty };
+        let (handle, synced) = {
+            let mut rfq_handles = self.rfq_handles.lock().await;
+            if let Some(existing) =
+                rfq_handles.by_rfq.get(&(cpty, rfq)).and_then(|w| w.upgrade())
+            {
+                let synced = existing.lock().await.subscribe_synced();
+                return Ok((existing, synced));
+            }
+            // reserve the insert while we wait for the proc
+            let (tx_synced, rx_synced) = watch::channel(false);
+            let handle = Arc::new(Mutex::new(RfqResponseHandle {
+                sub: None,
+                synced: false,
+                tx_synced,
+                last_rfq_response: None,
+            }));
+            rfq_handles.by_rfq.insert((cpty, rfq), Arc::downgrade(&handle));
+            (handle, Synced(rx_synced))
+        };
+        let path = self.common.paths.marketdata_api(cpty).append("subscribe-rfq");
+        let proc = Proc::new_with_timeout(
+            &self.common.subscriber,
+            path,
+            Duration::from_secs(2),
+        )?;
+        let res = call_rpc!(
+            proc,
+            base: format!("\"{}\"", rfq.base),
+            quote: format!("\"{}\"", rfq.quote),
+            quantity: rfq.quantity
+        )
+        .await?;
+        let uuid = res.to_string_naked();
+        let rfq_path = self.common.paths.marketdata_rfq(cpty).append(uuid.as_str());
+        let dval = self.common.subscriber.subscribe(rfq_path);
+        let sub_id = dval.id();
+        dval.updates(UpdatesFlags::BEGIN_WITH_LAST, self.subscription_tx.clone());
+        {
+            let mut handle = handle.lock().await;
+            handle.sub = Some(dval);
+        }
+        let mut rfq_handles = self.rfq_handles.lock().await;
+        rfq_handles.by_sub_id.insert(sub_id, Arc::downgrade(&handle));
+        Ok((handle, synced))
     }
 
     /// Keep a book client alive for some time instead of dropping immediately

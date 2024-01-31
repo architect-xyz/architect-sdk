@@ -102,6 +102,4 @@ impl RfqClient {
         }
         Ok(())
     }
-
-    // CR alee: add a one-shot RFQ request method
 }

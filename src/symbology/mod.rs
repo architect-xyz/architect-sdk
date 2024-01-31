@@ -39,6 +39,18 @@ impl Venue {
     pub fn new(name: &str) -> Result<api::symbology::Venue> {
         api::symbology::Venue::new(name)
     }
+
+    pub fn is_rfq(&self) -> bool {
+        match self.name.as_str() {
+            "WINTERMUTE" | "B2C2" | "GALAXY" | "CUMBERLAND" | "DVCHAIN" | "SFOX"
+            | "FALCONX" => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_otc(&self) -> bool {
+        self.is_rfq()
+    }
 }
 
 impl Route {

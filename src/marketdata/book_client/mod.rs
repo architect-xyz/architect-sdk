@@ -1,6 +1,6 @@
 //! Subscribe to book data
 
-use super::utils::legacy_marketdata_path_by_name;
+use super::utils::{legacy_marketdata_path_by_name, Synced};
 use crate::{
     symbology::{Cpty, Market},
     Common,
@@ -17,27 +17,12 @@ use netidx::{
     pool::Pooled,
     subscriber::{Dval, Event, SubId, Subscriber, UpdatesFlags, Value},
 };
-use std::{ops::Deref, time::Duration};
+use std::ops::Deref;
 use tokio::sync::watch;
 
 pub mod consolidated_level_book;
 pub mod level_book;
 pub use level_book::*;
-
-pub struct Synced(watch::Receiver<bool>);
-
-impl Synced {
-    pub async fn wait_synced(&mut self, timeout: Option<Duration>) -> Result<()> {
-        if let Some(timeout) = timeout {
-            if let Err(_) = tokio::time::timeout(timeout, self.0.wait_for(|v| *v)).await {
-                bail!("timed out waiting for book to sync");
-            }
-        } else {
-            self.0.wait_for(|v| *v).await?;
-        }
-        Ok(())
-    }
-}
 
 /// A subscription to book data
 pub struct BookClient {
