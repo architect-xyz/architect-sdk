@@ -2,14 +2,15 @@
 //! to a Cpty.  It handles connecting to an OrderflowAuthority, requesting
 //! an order id range, and passing orderflow messages.
 
-use crate::{ChannelDriver, Common, OrderIdAllocator};
+use crate::{AtomicOrderIdAllocator, ChannelDriver, Common, OrderIdAllocator};
 use anyhow::{anyhow, Result};
 use api::{orderflow::*, ComponentId, TypedMessage};
 use log::info;
+use std::sync::Arc;
 
 pub struct OrderflowClient {
-    driver: ChannelDriver,
-    order_ids: OrderIdAllocator,
+    driver: Arc<ChannelDriver>,
+    order_ids: AtomicOrderIdAllocator,
     target: ComponentId,
 }
 
@@ -21,19 +22,20 @@ impl OrderflowClient {
     /// If no order id range is specified, default to 2^20.
     pub async fn connect(
         common: &Common,
+        driver: Arc<ChannelDriver>,
         order_authority: Option<ComponentId>,
         order_id_range: Option<u64>,
         target: Option<ComponentId>,
     ) -> Result<Self> {
-        let mut driver = ChannelDriver::connect(common).await?;
-        let order_ids: OrderIdAllocator = OrderIdAllocator::get_allocation_with_driver(
-            common,
-            &mut driver,
-            order_authority,
-            order_id_range,
-        )
-        .await?
-        .into();
+        let order_ids: AtomicOrderIdAllocator =
+            OrderIdAllocator::get_allocation_with_driver(
+                &common,
+                &driver,
+                order_authority,
+                order_id_range,
+            )
+            .await?
+            .into();
         let target = target
             .or_else(|| {
                 info!("no target specified; searching for an Oms in config...");
@@ -43,7 +45,7 @@ impl OrderflowClient {
         Ok(Self { driver, order_ids, target })
     }
 
-    pub fn next_order_id(&mut self) -> Result<OrderId> {
+    pub fn next_order_id(&self) -> Result<OrderId> {
         self.order_ids.next()
     }
 

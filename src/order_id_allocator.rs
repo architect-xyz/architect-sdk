@@ -45,7 +45,7 @@ impl OrderIdAllocator {
 
     pub async fn get_allocation_with_driver(
         common: &Common,
-        driver: &mut ChannelDriver,
+        driver: &ChannelDriver,
         order_authority: Option<ComponentId>,
         order_id_range: Option<u64>,
     ) -> Result<OrderIdAllocation> {
@@ -77,5 +77,35 @@ impl OrderIdAllocator {
         let oid = OrderId::new_unchecked(self.next_order_id);
         self.next_order_id += 1;
         Ok(oid)
+    }
+}
+
+pub mod atomic {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[derive(Debug)]
+    pub struct AtomicOrderIdAllocator {
+        next_order_id: AtomicU64,
+        allocation_max: u64,
+    }
+
+    impl From<OrderIdAllocation> for AtomicOrderIdAllocator {
+        fn from(allocation: OrderIdAllocation) -> Self {
+            Self {
+                next_order_id: AtomicU64::new(allocation.allocation_min),
+                allocation_max: allocation.allocation_max,
+            }
+        }
+    }
+
+    impl AtomicOrderIdAllocator {
+        pub fn next(&self) -> Result<OrderId> {
+            let oid = self.next_order_id.fetch_add(1, Ordering::Relaxed);
+            if oid > self.allocation_max {
+                bail!("order id allocation exhausted")
+            }
+            Ok(OrderId::new_unchecked(oid))
+        }
     }
 }
