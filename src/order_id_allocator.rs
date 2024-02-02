@@ -56,7 +56,7 @@ impl OrderIdAllocator {
         let order_authority = order_authority
             .or_else(|| {
                 info!("no order authority specified; searching for one in config...");
-                common.find_local_component_of_kind("OrderAuthority")
+                common.get_local_component_of_kind("OrderAuthority")
             })
             .ok_or_else(|| anyhow!("no order authority found"))?;
         let order_id_range = order_id_range.unwrap_or(0x100000);

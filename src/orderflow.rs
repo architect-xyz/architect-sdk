@@ -39,7 +39,7 @@ impl OrderflowClient {
         let target = target
             .or_else(|| {
                 info!("no target specified; searching for an Oms in config...");
-                common.find_component_of_kind("Oms")
+                common.get_component_of_kind("Oms")
             })
             .ok_or_else(|| anyhow!("no target found"))?;
         Ok(Self { driver, order_ids, target })

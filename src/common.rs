@@ -185,7 +185,7 @@ impl Common {
         Ok(X509::from_pem(&fs::read(&identity.certificate)?)?)
     }
 
-    pub fn find_local_component_of_kind(&self, kind: &str) -> Option<ComponentId> {
+    pub fn get_local_component_of_kind(&self, kind: &str) -> Option<ComponentId> {
         for (com, (k, _)) in self.config.local.iter() {
             if k == kind {
                 return Some(*com);
@@ -194,8 +194,13 @@ impl Common {
         None
     }
 
-    pub fn find_component_of_kind(&self, kind: &str) -> Option<ComponentId> {
-        if let Some(com) = self.find_local_component_of_kind(kind) {
+    pub fn find_local_component_of_kind(&self, kind: &str) -> Result<ComponentId> {
+        self.get_local_component_of_kind(kind)
+            .ok_or_else(|| anyhow!("no local component of kind: {}", kind))
+    }
+
+    pub fn get_component_of_kind(&self, kind: &str) -> Option<ComponentId> {
+        if let Some(com) = self.get_local_component_of_kind(kind) {
             return Some(com);
         }
         for (_, coms) in self.config.remote.iter() {
@@ -206,6 +211,11 @@ impl Common {
             }
         }
         None
+    }
+
+    pub fn find_component_of_kind(&self, kind: &str) -> Result<ComponentId> {
+        self.get_component_of_kind(kind)
+            .ok_or_else(|| anyhow!("no component of kind: {}", kind))
     }
 
     /// Convenience function to initialize symbology from [Common]
