@@ -1,14 +1,14 @@
 [package]
 authors = ["Architect Financial Technologies LLC"]
+categories = ["finance", "cryptography::cryptocurrencies"]
 description = "Architect.xyz Trading Platform SDK"
 documentation = "https://docs.rs/architect-sdk"
+edition = "2021"
 homepage = "https://www.architect.xyz"
+keywords = ["crypto", "hft", "trading", "finance"]
 license = "AGPL-3.0-only"
 name = "architect-sdk"
 version = "0.2.0"
-edition = "2021"
-keywords = ["crypto", "hft", "trading", "finance"]
-categories = ["finance", "cryptography::cryptocurrencies"]
 
 [dependencies]
 anyhow = { workspace = true }
