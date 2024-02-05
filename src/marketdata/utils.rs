@@ -6,18 +6,24 @@ use rust_decimal::Decimal;
 use std::time::Duration;
 use tokio::sync::watch;
 
-pub struct Synced(pub watch::Receiver<bool>);
+pub struct Synced(pub watch::Receiver<u64>);
 
 impl Synced {
     pub async fn wait_synced(&mut self, timeout: Option<Duration>) -> Result<()> {
         if let Some(timeout) = timeout {
-            if let Err(_) = tokio::time::timeout(timeout, self.0.wait_for(|v| *v)).await {
+            if let Err(_) =
+                tokio::time::timeout(timeout, self.0.wait_for(|v| *v > 0)).await
+            {
                 bail!("timed out waiting for book to sync");
             }
         } else {
-            self.0.wait_for(|v| *v).await?;
+            self.0.wait_for(|v| *v > 0).await?;
         }
         Ok(())
+    }
+
+    pub async fn changed(&mut self) -> Result<()> {
+        Ok(self.0.changed().await?)
     }
 }
 

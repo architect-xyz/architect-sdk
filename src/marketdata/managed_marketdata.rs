@@ -27,7 +27,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::{broadcast, watch, Mutex},
+    sync::{watch, Mutex},
     task::{self, JoinHandle},
 };
 
@@ -52,14 +52,14 @@ pub struct RfqHandles {
 
 pub struct RfqResponseHandle {
     sub: Option<Dval>,
-    synced: bool,
-    tx_synced: watch::Sender<bool>,
+    synced: u64,
+    tx_updates: watch::Sender<u64>,
     pub last_rfq_response: Option<RfqResponse>,
 }
 
 impl RfqResponseHandle {
-    pub fn subscribe_synced(&self) -> Synced {
-        Synced(self.tx_synced.subscribe())
+    pub fn subscribe_updates(&self) -> Synced {
+        Synced(self.tx_updates.subscribe())
     }
 }
 
@@ -103,10 +103,8 @@ impl ManagedMarketdata {
                                         Ok(r) => {
                                             let mut rfq = rfq.lock().await;
                                             rfq.last_rfq_response = Some(r);
-                                            if !rfq.synced {
-                                                rfq.synced = true;
-                                                rfq.tx_synced.send_replace(true);
-                                            }
+                                            rfq.synced += 1;
+                                            rfq.tx_updates.send_replace(rfq.synced);
                                         }
                                         Err(e) => {
                                             error!("failed to parse RFQ response: {e}",)
@@ -150,14 +148,13 @@ impl ManagedMarketdata {
         }
     }
 
-    pub async fn subscribe(&self, market: Market) -> (Arc<Mutex<BookClient>>, Synced, broadcast::Receiver<()>) {
+    pub async fn subscribe(&self, market: Market) -> (Arc<Mutex<BookClient>>, Synced) {
         let mut book_handles = self.book_handles.lock().await;
         if let Some(existing) =
             book_handles.by_market.get(&market).and_then(|w| w.upgrade())
         {
-            let synced = existing.lock().await.subscribe_synced();
-            let book_updated = existing.lock().await.subscribe_book_updated();
-            return (existing, synced, book_updated);
+            let synced = existing.lock().await.subscribe_updates();
+            return (existing, synced);
         }
         let book_path = self.common.paths.marketdata_rt_book(market);
         let book_client = BookClient::new(
@@ -168,12 +165,11 @@ impl ManagedMarketdata {
             self.subscription_tx.clone(),
         );
         let sub_id = book_client.id();
-        let synced = book_client.subscribe_synced();
-        let book_updated = book_client.subscribe_book_updated();
+        let synced = book_client.subscribe_updates();
         let book_client = Arc::new(Mutex::new(book_client));
         book_handles.by_market.insert(market, Arc::downgrade(&book_client));
         book_handles.by_sub_id.insert(sub_id, Arc::downgrade(&book_client));
-        (book_client, synced, book_updated)
+        (book_client, synced)
     }
 
     pub async fn subscribe_rfq(
@@ -192,19 +188,19 @@ impl ManagedMarketdata {
             if let Some(existing) =
                 rfq_handles.by_rfq.get(&(cpty, rfq)).and_then(|w| w.upgrade())
             {
-                let synced = existing.lock().await.subscribe_synced();
+                let synced = existing.lock().await.subscribe_updates();
                 return Ok((existing, synced));
             }
             // reserve the insert while we wait for the proc
-            let (tx_synced, rx_synced) = watch::channel(false);
+            let (tx_updates, rx_updates) = watch::channel(0);
             let handle = Arc::new(Mutex::new(RfqResponseHandle {
                 sub: None,
-                synced: false,
-                tx_synced,
+                synced: 0,
+                tx_updates,
                 last_rfq_response: None,
             }));
             rfq_handles.by_rfq.insert((cpty, rfq), Arc::downgrade(&handle));
-            (handle, Synced(rx_synced))
+            (handle, Synced(rx_updates))
         };
         let path = self.common.paths.marketdata_api(cpty).append("subscribe-rfq");
         let proc = Proc::new_with_timeout(

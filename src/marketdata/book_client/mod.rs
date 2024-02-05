@@ -18,7 +18,7 @@ use netidx::{
     subscriber::{Dval, Event, SubId, Subscriber, UpdatesFlags, Value},
 };
 use std::ops::Deref;
-use tokio::sync::{broadcast, watch};
+use tokio::sync::watch;
 
 pub mod consolidated_level_book;
 pub mod level_book;
@@ -29,10 +29,8 @@ pub struct BookClient {
     book: LevelBook,
     market: Market,
     subscription: Dval,
-    synced: bool,
-    tx_synced: watch::Sender<bool>,
-    tx_book_updated: broadcast::Sender<()>,
-    _rx_book_updated: broadcast::Receiver<()>,
+    synced: u64,
+    tx_updates: watch::Sender<u64>,
 }
 
 impl Deref for BookClient {
@@ -71,18 +69,9 @@ impl BookClient {
             // snapshot manually
             subscription.write(Value::Null);
         }
-        let synced = false;
-        let (tx_synced, _) = watch::channel(synced);
-        let (tx_book_updated, _rx_book_updated) = broadcast::channel(100);
-        Self {
-            book: LevelBook::default(),
-            market,
-            subscription,
-            synced,
-            tx_synced,
-            tx_book_updated,
-            _rx_book_updated,
-        }
+        let synced = 0;
+        let (tx_updates, _) = watch::channel(synced);
+        Self { book: LevelBook::default(), market, subscription, synced, tx_updates }
     }
 
     /// Return the id of this subscription
@@ -99,15 +88,11 @@ impl BookClient {
     }
 
     pub fn synced(&self) -> bool {
-        self.synced
+        self.synced != 0
     }
 
-    pub fn subscribe_synced(&self) -> Synced {
-        Synced(self.tx_synced.subscribe())
-    }
-
-    pub fn subscribe_book_updated(&self) -> broadcast::Receiver<()> {
-        self.tx_book_updated.subscribe()
+    pub fn subscribe_updates(&self) -> Synced {
+        Synced(self.tx_updates.subscribe())
     }
 
     /// Process the specified book event, updating the book with it's
@@ -118,21 +103,22 @@ impl BookClient {
                 let typ: MessageHeader = Pack::decode(&mut buf)?;
                 match typ {
                     MessageHeader::Updates => {
-                        if self.synced {
+                        if self.synced > 0 {
                             let updates: Updates = Pack::decode(&mut buf)?;
                             trace!("book updates: {:?}", updates);
-                            self.book.update(updates)
+                            self.book.update(updates);
+                            self.synced += 1;
+                            self.tx_updates.send_replace(self.synced);
                         }
                     }
                     MessageHeader::Snapshot => {
                         let snap: Snapshot = Pack::decode(&mut buf)?;
                         trace!("book snap: {:?}", snap);
-                        self.synced = true;
-                        self.tx_synced.send_replace(true);
+                        self.synced = 1;
+                        self.tx_updates.send_replace(self.synced);
                         self.book.update_from_snapshot(snap)
                     }
                 }
-                let _ = self.tx_book_updated.send(());
             }
             // this is the default value before the book subscribes on the qf side
             Event::Update(Value::Null) | Event::Unsubscribed => (),
