@@ -27,7 +27,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::{watch, Mutex},
+    sync::{broadcast, watch, Mutex},
     task::{self, JoinHandle},
 };
 
@@ -150,13 +150,14 @@ impl ManagedMarketdata {
         }
     }
 
-    pub async fn subscribe(&self, market: Market) -> (Arc<Mutex<BookClient>>, Synced) {
+    pub async fn subscribe(&self, market: Market) -> (Arc<Mutex<BookClient>>, Synced, broadcast::Receiver<()>) {
         let mut book_handles = self.book_handles.lock().await;
         if let Some(existing) =
             book_handles.by_market.get(&market).and_then(|w| w.upgrade())
         {
             let synced = existing.lock().await.subscribe_synced();
-            return (existing, synced);
+            let book_updated = existing.lock().await.subscribe_book_updated();
+            return (existing, synced, book_updated);
         }
         let book_path = self.common.paths.marketdata_rt_book(market);
         let book_client = BookClient::new(
@@ -168,10 +169,11 @@ impl ManagedMarketdata {
         );
         let sub_id = book_client.id();
         let synced = book_client.subscribe_synced();
+        let book_updated = book_client.subscribe_book_updated();
         let book_client = Arc::new(Mutex::new(book_client));
         book_handles.by_market.insert(market, Arc::downgrade(&book_client));
         book_handles.by_sub_id.insert(sub_id, Arc::downgrade(&book_client));
-        (book_client, synced)
+        (book_client, synced, book_updated)
     }
 
     pub async fn subscribe_rfq(

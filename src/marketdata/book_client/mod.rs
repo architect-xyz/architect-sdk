@@ -18,7 +18,7 @@ use netidx::{
     subscriber::{Dval, Event, SubId, Subscriber, UpdatesFlags, Value},
 };
 use std::ops::Deref;
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 
 pub mod consolidated_level_book;
 pub mod level_book;
@@ -31,6 +31,8 @@ pub struct BookClient {
     subscription: Dval,
     synced: bool,
     tx_synced: watch::Sender<bool>,
+    tx_book_updated: broadcast::Sender<()>,
+    _rx_book_updated: broadcast::Receiver<()>,
 }
 
 impl Deref for BookClient {
@@ -71,7 +73,16 @@ impl BookClient {
         }
         let synced = false;
         let (tx_synced, _) = watch::channel(synced);
-        Self { book: LevelBook::default(), market, subscription, synced, tx_synced }
+        let (tx_book_updated, _rx_book_updated) = broadcast::channel(100);
+        Self {
+            book: LevelBook::default(),
+            market,
+            subscription,
+            synced,
+            tx_synced,
+            tx_book_updated,
+            _rx_book_updated,
+        }
     }
 
     /// Return the id of this subscription
@@ -93,6 +104,10 @@ impl BookClient {
 
     pub fn subscribe_synced(&self) -> Synced {
         Synced(self.tx_synced.subscribe())
+    }
+
+    pub fn subscribe_book_updated(&self) -> broadcast::Receiver<()> {
+        self.tx_book_updated.subscribe()
     }
 
     /// Process the specified book event, updating the book with it's
@@ -117,6 +132,7 @@ impl BookClient {
                         self.book.update_from_snapshot(snap)
                     }
                 }
+                let _ = self.tx_book_updated.send(());
             }
             // this is the default value before the book subscribes on the qf side
             Event::Update(Value::Null) | Event::Unsubscribed => (),
