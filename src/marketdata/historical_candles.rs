@@ -1,13 +1,11 @@
-use super::utils::{
-    apply_oneshot, legacy_hist_ohlc_path_by_name, legacy_ohlc_path_by_name,
-};
+use super::utils::apply_oneshot;
 use crate::{
-    symbology::{self, static_ref::StaticRef, Cpty, Market},
+    symbology::{self, static_ref::StaticRef},
     Common,
 };
 use anyhow::{anyhow, Result};
 use api::{
-    marketdata::{CandleV1, CandleWidth, NetidxFeedPaths},
+    marketdata::{CandleV1, CandleWidth},
     symbology::MarketId,
 };
 use chrono::{DateTime, Utc};
@@ -19,28 +17,6 @@ use netidx::{
 };
 use netidx_archive::recorder_client;
 
-pub fn live_candles_base_path(common: &Common, market: Market) -> Path {
-    let cpty = Cpty { route: market.route, venue: market.venue };
-    if common.config.use_legacy_marketdata_paths {
-        let base_path = common.paths.marketdata(cpty);
-        legacy_ohlc_path_by_name(base_path, market)
-    } else {
-        let base_path = common.paths.marketdata_ohlc(cpty);
-        market.path_by_name(&base_path)
-    }
-}
-
-pub fn recorder_base_path(common: &Common, market: Market) -> Path {
-    let cpty = Cpty { route: market.route, venue: market.venue };
-    if common.config.use_legacy_marketdata_paths {
-        let base_path = common.paths.marketdata(cpty);
-        legacy_hist_ohlc_path_by_name(base_path, market)
-    } else {
-        let base_path = common.paths.marketdata_hist_ohlc(cpty);
-        market.path_by_name(&base_path)
-    }
-}
-
 pub async fn get(
     common: &Common,
     id: MarketId,
@@ -51,8 +27,8 @@ pub async fn get(
     let market =
         symbology::Market::get_by_id(&id).ok_or_else(|| anyhow!("unknown market"))?;
     log::info!("{} {:?} from {} to {}", market.name, width, start, end);
-    let live_base = live_candles_base_path(common, market.clone());
-    let recorder_base = recorder_base_path(common, market);
+    let live_base = common.paths.marketdata_ohlc_by_name(market);
+    let recorder_base = common.paths.marketdata_hist_ohlc(market.cpty());
     let recorder_client =
         recorder_client::Client::new(&common.subscriber, &recorder_base)?;
     get_from_recorder(recorder_client, live_base, start, end, width).await

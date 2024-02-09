@@ -156,7 +156,7 @@ impl ManagedMarketdata {
             let synced = existing.lock().await.subscribe_updates();
             return (existing, synced);
         }
-        let book_path = self.common.paths.marketdata_rt_book(market);
+        let book_path = self.common.paths.marketdata_rt_by_name(market).append("book");
         let book_client = BookClient::new(
             &self.common.subscriber,
             &book_path,

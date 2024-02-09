@@ -91,14 +91,12 @@ impl Cpty {
         Self::get_by_id(id).ok_or_else(|| anyhow!("missing cpty: {}", id))
     }
 
+    pub fn id(&self) -> CptyId {
+        CptyId { venue: self.venue.id, route: self.route.id }
+    }
+
     pub fn name(&self) -> String {
         format!("{}/{}", self.venue.name, self.route.name)
-    }
-}
-
-impl Into<CptyId> for Cpty {
-    fn into(self) -> CptyId {
-        CptyId { venue: self.venue.id, route: self.route.id }
     }
 }
 

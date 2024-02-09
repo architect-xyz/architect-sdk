@@ -72,9 +72,13 @@ impl Common {
                 remote_components.insert(*com, path.clone());
             }
         }
-        let mut marketdata_location_override = FxHashMap::default();
-        for (k, v) in f.marketdata_location_override {
-            marketdata_location_override.insert(CptyId::from_str(&k)?, v);
+        let mut use_local_marketdata = FxHashSet::default();
+        for cpty in f.use_local_marketdata {
+            use_local_marketdata.insert(CptyId::from_str(&cpty)?);
+        }
+        let mut use_legacy_marketdata = FxHashSet::default();
+        for cpty in f.use_legacy_marketdata {
+            use_legacy_marketdata.insert(CptyId::from_str(&cpty)?);
         }
         Ok(Self(Arc::new(CommonInner {
             config_path,
@@ -94,8 +98,8 @@ impl Common {
                 remote_components,
                 use_local_symbology: f.use_local_symbology,
                 use_local_userdb: f.use_local_userdb,
-                use_legacy_marketdata_paths: f.use_legacy_marketdata_paths,
-                marketdata_location_override,
+                use_local_marketdata,
+                use_legacy_marketdata,
             },
         })))
     }

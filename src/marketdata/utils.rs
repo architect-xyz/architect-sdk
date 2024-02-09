@@ -1,7 +1,6 @@
-use crate::symbology::{self, Market};
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
-use netidx::{path::Path, resolver_client::GlobSet, subscriber::Event};
+use netidx::{resolver_client::GlobSet, subscriber::Event};
 use rust_decimal::Decimal;
 use std::time::Duration;
 use tokio::sync::watch;
@@ -25,53 +24,6 @@ impl Synced {
     pub async fn changed(&mut self) -> Result<()> {
         Ok(self.0.changed().await?)
     }
-}
-
-// TODO: maybe deprecate these or move these to common
-
-pub fn legacy_marketdata_path_by_name(base_path: Path, market: Market) -> Path {
-    match market.kind {
-        symbology::MarketKind::Exchange(symbology::market::ExchangeMarketKind {
-            base,
-            quote,
-        }) => base_path
-            .append("rt")
-            .append("by-name")
-            .append(market.venue.name.as_str())
-            .append(market.route.name.as_str())
-            .append(base.name.as_str())
-            .append(quote.name.as_str()),
-        _ => {
-            panic!("legacy_marketdata_paths only supported for Exchange markets")
-        }
-    }
-}
-
-pub fn legacy_ohlc_path_by_name(base_path: Path, market: Market) -> Path {
-    match market.kind {
-        symbology::MarketKind::Exchange(symbology::market::ExchangeMarketKind {
-            base,
-            quote,
-        }) => base_path
-            .append("ohlc")
-            .append("by-name")
-            .append(market.venue.name.as_str())
-            .append(market.route.name.as_str())
-            .append(base.name.as_str())
-            .append(quote.name.as_str()),
-        _ => {
-            panic!("legacy_marketdata_paths only supported for Exchange markets")
-        }
-    }
-}
-
-pub fn legacy_hist_ohlc_path_by_name(base_path: Path, market: Market) -> Path {
-    base_path
-        .append("hist")
-        .append("ohlc")
-        .append("by-name")
-        .append(market.venue.name.as_str())
-        .append(market.route.name.as_str())
 }
 
 pub fn decimal_or_error(e: &netidx::subscriber::Event) -> Result<Decimal> {

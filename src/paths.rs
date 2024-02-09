@@ -1,15 +1,9 @@
-use crate::{
-    marketdata::utils::legacy_marketdata_path_by_name,
-    symbology::{Cpty, Market},
-};
-use api::{
-    config::Location, marketdata::NetidxFeedPaths, symbology::CptyId, ComponentId,
-};
+use crate::symbology::{market::ExchangeMarketKind, Cpty, Market, MarketKind};
+use api::{marketdata::NetidxFeedPaths, symbology::CptyId, ComponentId};
 use fxhash::{FxHashMap, FxHashSet};
 use netidx::path::Path;
 
-// CR alee: this begs the existence of a ComponentKind type
-/// Keeps track of where each component is publishing in netidx
+/// Paths to services in netidx, "config-as-service-discovery"
 #[derive(Debug, Clone)]
 pub struct Paths {
     pub hosted_base: Path,
@@ -19,23 +13,11 @@ pub struct Paths {
     pub remote_components: FxHashMap<ComponentId, Path>,
     pub use_local_symbology: bool,
     pub use_local_userdb: bool,
-    // TODO: probably sinter these into
-    // marketdata_base_path_override
-    // use_legacy_marketdata: Vec<CptyId> or Star...make a Star<T> type
-    pub use_legacy_marketdata_paths: bool,
-    pub marketdata_location_override: FxHashMap<CptyId, Location>,
+    pub use_local_marketdata: FxHashSet<CptyId>,
+    pub use_legacy_marketdata: FxHashSet<CptyId>,
 }
 
 impl Paths {
-    /// given a location, return the base path in netidx under which
-    /// that location's components may be found
-    pub fn base(&self, location: &Location) -> &Path {
-        match location {
-            Location::Hosted => &self.hosted_base,
-            Location::Local => &self.local_base,
-        }
-    }
-
     /// Symbology server
     pub fn sym(&self) -> Path {
         let base =
@@ -45,15 +27,17 @@ impl Paths {
 
     /// Marketdata feeds
     pub fn marketdata(&self, cpty: Cpty) -> Path {
-        let base = self.base(
-            self.marketdata_location_override
-                .get(&CptyId { venue: cpty.venue.id, route: cpty.route.id })
-                .unwrap_or(&Location::Local),
-        );
-        base.append("qf")
+        let use_local = self.use_local_marketdata.contains(&cpty.id());
+        let use_legacy = self.use_legacy_marketdata.contains(&cpty.id());
+        let base = if use_local { &self.local_base } else { &self.hosted_base };
+        if use_legacy {
+            base.append("qf")
+        } else {
+            base.append("marketdata")
+        }
     }
 
-    /// Realtime marketdata feeds
+    /// Realtime marketdata feed
     pub fn marketdata_rt(&self, cpty: Cpty) -> Path {
         self.marketdata(cpty)
             .append("rt")
@@ -61,19 +45,42 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
-    /// Realtime marketdata book
-    pub fn marketdata_rt_book(&self, market: Market) -> Path {
-        let cpty = Cpty { venue: market.venue, route: market.route };
-        if self.use_legacy_marketdata_paths {
-            let base_path = self.marketdata(cpty);
-            legacy_marketdata_path_by_name(base_path, market).append("book")
+    /// Realtime marketdata feed for a specific market, referenced by-id
+    pub fn marketdata_rt_by_id(&self, market: Market) -> Path {
+        let cpty = market.cpty();
+        if self.use_legacy_marketdata.contains(&cpty.id()) {
+            self.marketdata(cpty)
+                .append("rt")
+                .append("by-id")
+                .append(&market.id.to_string())
         } else {
-            let base_path = self.marketdata_rt(cpty);
-            market.path_by_name(&base_path).append("book")
+            market.path_by_id(&self.marketdata_rt(cpty))
         }
     }
 
-    /// Realtime marketdata candles
+    /// Realtime marketdata feed for a specific market, aliased by-name
+    pub fn marketdata_rt_by_name(&self, market: Market) -> Path {
+        let cpty = market.cpty();
+        if self.use_legacy_marketdata.contains(&cpty.id()) {
+            match market.kind {
+                MarketKind::Exchange(ExchangeMarketKind { base, quote }) => self
+                    .marketdata(cpty)
+                    .append("rt")
+                    .append("by-name")
+                    .append(&market.venue.name)
+                    .append(&market.route.name)
+                    .append(base.name.as_str())
+                    .append(quote.name.as_str()),
+                _ => {
+                    panic!("legacy_marketdata_paths only supported for Exchange markets");
+                }
+            }
+        } else {
+            market.path_by_name(&self.marketdata_rt(cpty))
+        }
+    }
+
+    /// Realtime marketdata candles base
     pub fn marketdata_ohlc(&self, cpty: Cpty) -> Path {
         self.marketdata(cpty)
             .append("ohlc")
@@ -81,13 +88,45 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
-    /// Hist marketdata candles
+    /// Realtime marketdata candles, aliased by-name
+    pub fn marketdata_ohlc_by_name(&self, market: Market) -> Path {
+        let cpty = market.cpty();
+        if self.use_legacy_marketdata.contains(&cpty.id()) {
+            match market.kind {
+                MarketKind::Exchange(ExchangeMarketKind { base, quote }) => self
+                    .marketdata(cpty)
+                    .append("ohlc")
+                    .append("by-name")
+                    .append(&market.venue.name)
+                    .append(&market.route.name)
+                    .append(base.name.as_str())
+                    .append(quote.name.as_str()),
+                _ => {
+                    panic!("legacy_marketdata_paths only supported for Exchange markets");
+                }
+            }
+        } else {
+            let base = self.marketdata_ohlc(cpty);
+            market.path_by_name(&base)
+        }
+    }
+
+    /// Historical marketdata candles recorder
     pub fn marketdata_hist_ohlc(&self, cpty: Cpty) -> Path {
-        self.marketdata(cpty)
-            .append("hist")
-            .append("ohlc")
-            .append(&cpty.venue.name)
-            .append(&cpty.route.name)
+        if self.use_legacy_marketdata.contains(&cpty.id()) {
+            self.marketdata(cpty)
+                .append("hist")
+                .append("ohlc")
+                .append("by-name")
+                .append(&cpty.venue.name)
+                .append(&cpty.route.name)
+        } else {
+            self.marketdata(cpty)
+                .append("hist")
+                .append("ohlc")
+                .append(&cpty.venue.name)
+                .append(&cpty.route.name)
+        }
     }
 
     /// Marketdata APIs (RPCs)

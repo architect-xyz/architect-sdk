@@ -1,5 +1,5 @@
 use super::{
-    allocator::StaticBumpAllocator, static_ref::StaticRef, Product, Route, Venue,
+    allocator::StaticBumpAllocator, static_ref::StaticRef, Cpty, Product, Route, Venue,
 };
 use crate::static_ref;
 use anyhow::{bail, Result};
@@ -56,6 +56,10 @@ impl Market {
             exchange_symbol,
             extra_info,
         )
+    }
+
+    pub fn cpty(&self) -> Cpty {
+        Cpty { venue: self.venue, route: self.route }
     }
 }
 
