@@ -112,6 +112,10 @@ impl LevelBook {
         self.sell.clear();
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.buy.is_empty() && self.sell.is_empty()
+    }
+
     pub(super) fn update_from_snapshot(&mut self, mut snapshot: Snapshot) {
         self.buy.clear();
         self.sell.clear();
