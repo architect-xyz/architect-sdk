@@ -166,6 +166,10 @@ impl Txn {
         self.route_by_id.get(id).copied()
     }
 
+    pub fn find_route_by_id(&self, id: &RouteId) -> Result<Route> {
+        self.get_route_by_id(id).ok_or_else(|| anyhow!("no such route"))
+    }
+
     pub fn add_route(&mut self, route: api::symbology::Route) -> Result<Route> {
         Route::insert(
             Arc::make_mut(&mut self.route_by_name),
@@ -189,6 +193,10 @@ impl Txn {
 
     pub fn get_venue_by_id(&self, id: &VenueId) -> Option<Venue> {
         self.venue_by_id.get(id).copied()
+    }
+
+    pub fn find_venue_by_id(&self, id: &VenueId) -> Result<Venue> {
+        self.get_venue_by_id(id).ok_or_else(|| anyhow!("no such venue"))
     }
 
     pub fn add_venue(&mut self, venue: api::symbology::Venue) -> Result<Venue> {
