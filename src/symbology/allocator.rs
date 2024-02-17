@@ -58,7 +58,7 @@ impl<T: Clone + 'static, const SZ: usize> StaticBumpAllocator<T, SZ> {
         loop {
             snaps.push(cur);
             if let Some(p) = previous {
-                if cur.data as *const _ == p.data {
+                if std::ptr::eq(cur.data as *const _, p.data) {
                     break;
                 }
             }
