@@ -113,6 +113,26 @@ impl ProductKind {
         }
     }
 
+    pub fn iter_dependents(&self, mut f: impl FnMut(&Product)) {
+        match self {
+            ProductKind::Coin { .. }
+            | ProductKind::Fiat
+            | ProductKind::Equity
+            | ProductKind::Perpetual
+            | ProductKind::Index
+            | ProductKind::Commodity
+            | ProductKind::Unknown => {}
+            ProductKind::Future { underlying, .. }
+            | ProductKind::Option { underlying, .. } => {
+                underlying.map(|p| f(&p));
+            }
+            ProductKind::FutureSpread { same_side_leg, opp_side_leg } => {
+                same_side_leg.map(|p| f(&p));
+                opp_side_leg.map(|p| f(&p));
+            }
+        }
+    }
+
     // /// return the option direction, or None if the product isn't an
     // /// option.
     // pub fn option_dir(&self) -> Option<OptionDir> {

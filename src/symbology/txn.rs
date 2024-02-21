@@ -481,10 +481,28 @@ impl Txn {
         }
     }
 
+    fn dump_product(
+        &self,
+        pset: &mut FxHashSet<Product>,
+        updates: &mut Vec<SymbologyUpdateKind>,
+        product: &Product,
+    ) {
+        product.kind.iter_dependents(|p| {
+            if !pset.contains(p) {
+                self.dump_product(pset, updates, p);
+            }
+        });
+        if !pset.contains(product) {
+            pset.insert(*product);
+            updates.push(SymbologyUpdateKind::AddProduct((&**product).into()));
+        }
+    }
+
     /// dump the current symbology as of Txn to a series of symbology updates
     pub fn dump(&self) -> Pooled<Vec<SymbologyUpdateKind>> {
         pool!(pool_pset, FxHashSet<Product>, 2, 1_000_000);
         pool!(pool_update, Vec<SymbologyUpdateKind>, 2, 1_000_000);
+        let mut pset = pool_pset().take();
         let mut updates = pool_update().take();
         for (_, venue) in &*self.venue_by_id {
             updates.push(SymbologyUpdateKind::AddVenue((**venue).clone()));
@@ -493,7 +511,7 @@ impl Txn {
             updates.push(SymbologyUpdateKind::AddRoute((**route).clone()));
         }
         for (_, product) in &*self.product_by_id {
-            updates.push(SymbologyUpdateKind::AddProduct((&**product).into()));
+            self.dump_product(&mut pset, &mut updates, &product);
         }
         for (_, market) in &*self.market_by_id {
             updates.push(SymbologyUpdateKind::AddMarket((**market).clone().into()));

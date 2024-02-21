@@ -116,6 +116,12 @@ pub trait StaticRef<T: Symbolic, const SLAB_SIZE: usize>:
         })
     }
 
+    /// Look up a symbol by name or id.
+    fn find_by_name_or_id(s: &str) -> Result<Self, anyhow::Error> {
+        Self::get_by_name_or_id(s)
+            .ok_or_else(|| anyhow::anyhow!("missing {}: {}", T::type_name(), s))
+    }
+
     /// Get a map of all symbols indexed by name. This is O(1)
     fn all() -> Arc<Map<Str, Self>> {
         Self::by_name().load_full()
