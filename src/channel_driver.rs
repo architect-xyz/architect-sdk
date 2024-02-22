@@ -55,8 +55,10 @@ impl ChannelDriver {
                         _ = channel.recv(|m| { messages.push(m); true }).fuse() => {}
                     }
                     let buf = std::mem::replace(&mut messages, Vec::new());
-                    if let Err(e) = tx.send(Arc::new(buf)) {
-                        error!("channel driver send error, dropping: {}", e);
+                    if !buf.is_empty() {
+                        if let Err(e) = tx.send(Arc::new(buf)) {
+                            error!("channel driver send error, dropping: {}", e);
+                        }
                     }
                     if closed {
                         break;
