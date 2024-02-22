@@ -33,7 +33,7 @@ impl OrderIdAllocator {
         order_authority: Option<ComponentId>,
         order_id_range: Option<u64>,
     ) -> Result<OrderIdAllocation> {
-        let mut driver = ChannelDriver::connect(common).await?;
+        let mut driver = ChannelDriver::connect(common, None).await?;
         Self::get_allocation_with_driver(
             common,
             &mut driver,

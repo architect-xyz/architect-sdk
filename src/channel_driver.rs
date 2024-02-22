@@ -2,24 +2,33 @@
 //! useful specialized functions.
 
 use crate::Common;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use api::{
     utils::messaging::MaybeRequest, Address, ComponentId, Envelope, MaybeSplit, Stamp,
     TypedMessage,
 };
+use futures_util::{select_biased, FutureExt};
+use log::{debug, error};
 use netidx_protocols::pack_channel;
 use std::sync::Arc;
-use tokio::{sync::broadcast, task};
+use tokio::{
+    sync::{broadcast, oneshot},
+    task,
+};
+
+static DEFAULT_CHANNEL_ID: u32 = 1;
 
 pub struct ChannelDriver {
     channel: Arc<pack_channel::client::Connection>,
     src: Address,
     tx: broadcast::Sender<Arc<Vec<Envelope<TypedMessage>>>>,
     _rx: broadcast::Receiver<Arc<Vec<Envelope<TypedMessage>>>>,
+    close: Option<(oneshot::Sender<()>, task::JoinHandle<()>)>,
 }
 
 impl ChannelDriver {
-    pub async fn connect(common: &Common) -> Result<Self> {
+    pub async fn connect(common: &Common, channel_id: Option<u32>) -> Result<Self> {
+        let channel_id = channel_id.unwrap_or(DEFAULT_CHANNEL_ID);
         let channel = Arc::new(
             pack_channel::client::Connection::connect(
                 &common.subscriber,
@@ -27,26 +36,46 @@ impl ChannelDriver {
             )
             .await?,
         );
-        let src = channel.recv_one().await?;
+        debug!("beginning channel handshake, channel_id = {}", channel_id);
+        channel.send_one(&channel_id)?;
+        let src: Address = channel.recv_one().await?;
+        debug!("channel handshake complete, channel = {}", src);
+        let (close_tx, close_rx) = oneshot::channel();
         let (tx, rx) = broadcast::channel(1000);
-        {
+        let join = {
             let channel = channel.clone();
             let tx = tx.clone();
             task::spawn(async move {
                 let mut messages: Vec<Envelope<TypedMessage>> = vec![];
-                while let Ok(()) = channel
-                    .recv(|m| {
-                        messages.push(m);
-                        true
-                    })
-                    .await
-                {
+                let mut close_rx = close_rx.fuse();
+                loop {
+                    let mut closed = false;
+                    select_biased! {
+                        _ = &mut close_rx => { closed = true; },
+                        _ = channel.recv(|m| { messages.push(m); true }).fuse() => {}
+                    }
                     let buf = std::mem::replace(&mut messages, Vec::new());
-                    tx.send(Arc::new(buf)).unwrap();
+                    if let Err(e) = tx.send(Arc::new(buf)) {
+                        error!("channel driver send error, dropping: {}", e);
+                    }
+                    if closed {
+                        break;
+                    }
                 }
-            });
+            })
+        };
+        Ok(Self { channel, src, tx, _rx: rx, close: Some((close_tx, join)) })
+    }
+
+    /// Close the channel, waiting for all queued messages to send
+    pub async fn close(&mut self) -> Result<()> {
+        if let Some((close_tx, join)) = self.close.take() {
+            close_tx.send(()).map_err(|_| anyhow!("channel already closed"))?;
+            join.await?;
+            Ok(())
+        } else {
+            bail!("channel already closed")
         }
-        Ok(Self { channel, src, tx, _rx: rx })
     }
 
     pub fn src(&self) -> Address {
@@ -68,7 +97,7 @@ impl ChannelDriver {
         self.channel.send_one(&Envelope {
             src: self.src,
             dst: Address::Component(dst),
-            stamp: Stamp::Unstamped,
+            stamp: Stamp::default(),
             msg: msg.into(),
         })
     }
