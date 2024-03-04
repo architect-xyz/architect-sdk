@@ -1,4 +1,4 @@
-use crate::Paths;
+use crate::{admin_stats::StatCmd, Paths};
 use anyhow::{anyhow, bail, Context, Result};
 use api::{symbology::CptyId, ComponentId, Config};
 use fxhash::{FxHashMap, FxHashSet};
@@ -9,6 +9,7 @@ use netidx::{
     publisher::{BindCfg, Publisher, PublisherBuilder},
     subscriber::{DesiredAuth, Subscriber},
 };
+use once_cell::sync::OnceCell;
 use openssl::{pkey::Private, rsa::Rsa, x509::X509};
 use std::{fs, ops::Deref, path::PathBuf, str::FromStr, sync::Arc};
 use tokio::task;
@@ -101,6 +102,7 @@ impl Common {
                 use_local_marketdata,
                 use_legacy_marketdata,
             },
+            stats: OnceCell::new(),
         })))
     }
 
@@ -256,4 +258,6 @@ pub struct CommonInner {
     pub subscriber: Subscriber,
     /// The path map
     pub paths: Paths,
+    /// Optional admin_stats support
+    pub(crate) stats: OnceCell<futures::channel::mpsc::UnboundedSender<(Path, StatCmd)>>,
 }

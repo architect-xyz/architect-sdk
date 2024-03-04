@@ -13,6 +13,7 @@ version = "0.2.0"
 [dependencies]
 anyhow = { workspace = true }
 api = { package = "architect-api", version = "0.2.1", path = "../api" }
+arcstr = { workspace = true }
 arc-swap = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
@@ -42,6 +43,7 @@ serde_derive = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 smallvec = { workspace = true }
+sysinfo = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }

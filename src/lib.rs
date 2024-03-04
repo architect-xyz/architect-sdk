@@ -1,3 +1,4 @@
+mod admin_stats;
 pub mod channel_driver;
 pub mod common;
 pub mod marketdata;
