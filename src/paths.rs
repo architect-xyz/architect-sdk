@@ -91,9 +91,12 @@ impl Paths {
     }
 
     /// Realtime marketdata candles, aliased by-name
-    pub fn marketdata_ohlc_by_name(&self, market: Market) -> Path {
+    /// If hist is true, pull the name as if we were querying historical data
+    pub fn marketdata_ohlc_by_name(&self, market: Market, hist: bool) -> Path {
         let cpty = market.cpty();
-        if self.use_legacy_marketdata.contains(&cpty.id()) {
+        if self.use_legacy_marketdata.contains(&cpty.id())
+            || (hist && self.use_legacy_hist_marketdata.contains(&cpty.id()))
+        {
             match market.kind {
                 MarketKind::Exchange(ExchangeMarketKind { base, quote }) => self
                     .marketdata(cpty, false)

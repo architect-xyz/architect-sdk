@@ -27,7 +27,7 @@ pub async fn get(
     let market =
         symbology::Market::get_by_id(&id).ok_or_else(|| anyhow!("unknown market"))?;
     log::info!("{} {:?} from {} to {}", market.name, width, start, end);
-    let live_base = common.paths.marketdata_ohlc_by_name(market);
+    let live_base = common.paths.marketdata_ohlc_by_name(market, true);
     let recorder_base = common.paths.marketdata_hist_ohlc(market.cpty());
     let recorder_client =
         recorder_client::Client::new(&common.subscriber, &recorder_base)?;
