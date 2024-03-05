@@ -81,6 +81,10 @@ impl Common {
         for cpty in f.use_legacy_marketdata {
             use_legacy_marketdata.insert(CptyId::from_str(&cpty)?);
         }
+        let mut use_legacy_hist_marketdata = FxHashSet::default();
+        for cpty in f.use_legacy_hist_marketdata {
+            use_legacy_hist_marketdata.insert(CptyId::from_str(&cpty)?);
+        }
         Ok(Self(Arc::new(CommonInner {
             config_path,
             config,
@@ -101,6 +105,7 @@ impl Common {
                 use_local_userdb: f.use_local_userdb,
                 use_local_marketdata,
                 use_legacy_marketdata,
+                use_legacy_hist_marketdata,
             },
             stats: OnceCell::new(),
         })))
