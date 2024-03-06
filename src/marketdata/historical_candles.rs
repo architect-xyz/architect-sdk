@@ -1,14 +1,9 @@
 use super::utils::apply_oneshot;
-use crate::{
-    symbology::{self, static_ref::StaticRef},
-    Common,
-};
-use anyhow::{anyhow, Result};
-use api::{
-    marketdata::{CandleV1, CandleWidth},
-    symbology::MarketId,
-};
+use crate::{symbology, Common};
+use anyhow::Result;
+use api::marketdata::{CandleV1, CandleWidth};
 use chrono::{DateTime, Utc};
+use log::debug;
 use netidx::{
     chars::Chars,
     path::Path,
@@ -19,15 +14,20 @@ use netidx_archive::recorder_client;
 
 pub async fn get(
     common: &Common,
-    id: MarketId,
+    market: symbology::Market,
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     width: CandleWidth,
 ) -> Result<Vec<CandleV1>> {
-    let market =
-        symbology::Market::get_by_id(&id).ok_or_else(|| anyhow!("unknown market"))?;
-    log::info!("{} {:?} from {} to {}", market.name, width, start, end);
     let live_base = common.paths.marketdata_ohlc_by_name(market, true);
+    debug!(
+        "requesting historical {} candles for {}: from {} to {} via {}",
+        width.as_str(),
+        market.name,
+        start,
+        end,
+        live_base
+    );
     let recorder_base = common.paths.marketdata_hist_ohlc(market.cpty());
     let recorder_client =
         recorder_client::Client::new(&common.subscriber, &recorder_base)?;

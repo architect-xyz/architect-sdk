@@ -99,7 +99,7 @@ impl Paths {
         {
             match market.kind {
                 MarketKind::Exchange(ExchangeMarketKind { base, quote }) => self
-                    .marketdata(cpty, false)
+                    .marketdata(cpty, hist)
                     .append("ohlc")
                     .append("by-name")
                     .append(&market.venue.name)
