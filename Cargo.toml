@@ -36,6 +36,7 @@ parking_lot = { workspace = true }
 paste = { workspace = true }
 pkcs8 = { workspace = true }
 portable-atomic = { workspace = true }
+regex = { workspace = true }
 rust_decimal = { workspace = true }
 rust_decimal_macros = { workspace = true }
 serde = { workspace = true }

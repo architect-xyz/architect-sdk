@@ -7,7 +7,7 @@ use api::{
     symbology::{
         market::NormalizedMarketInfo,
         query::{DateQ, Query},
-        RouteId, VenueId,
+        RouteId, Symbolic, VenueId,
     },
     Str,
 };
@@ -206,6 +206,15 @@ impl MarketIndex {
             }
             Query::Not(term) => self.all.diff(&self.query_(term)),
             Query::All => self.all.clone(),
+            Query::Regex(s) => {
+                // CR alee: consider making this function fallible
+                let re = regex::Regex::new(s.as_str()).unwrap();
+                self.all
+                    .into_iter()
+                    .filter(|t| re.is_match(t.name().as_str()))
+                    .map(|t| *t)
+                    .collect()
+            }
             Query::Base(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
                 self.by_base.get(&p).cloned().unwrap_or_else(Set::new)
             }),
