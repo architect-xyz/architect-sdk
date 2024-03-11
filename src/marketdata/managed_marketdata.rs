@@ -34,6 +34,7 @@ use tokio::{
 pub struct ManagedMarketdata {
     book_handles: Arc<Mutex<BookHandles>>,
     rfq_handles: Arc<Mutex<RfqHandles>>,
+    dval_handles: Arc<Mutex<DvalHandles>>,
     common: Common,
     _subscription_driver: Option<JoinHandle<()>>,
     subscription_tx: mpsc::Sender<Pooled<Vec<(SubId, Event)>>>,
@@ -50,6 +51,11 @@ pub struct RfqHandles {
     by_sub_id: FxHashMap<SubId, Weak<Mutex<RfqResponseHandle>>>,
 }
 
+pub struct DvalHandles {
+    by_market_and_path_leaf: FxHashMap<(Market, String), Weak<Mutex<DvalHandle>>>,
+    by_sub_id: FxHashMap<SubId, Weak<Mutex<DvalHandle>>>,
+}
+
 pub struct RfqResponseHandle {
     sub: Option<Dval>,
     synced: u64,
@@ -58,6 +64,19 @@ pub struct RfqResponseHandle {
 }
 
 impl RfqResponseHandle {
+    pub fn subscribe_updates(&self) -> Synced {
+        Synced(self.tx_updates.subscribe())
+    }
+}
+
+pub struct DvalHandle {
+    sub: Option<Dval>,
+    synced: u64,
+    tx_updates: watch::Sender<u64>,
+    pub last_value: Option<Value>,
+}
+
+impl DvalHandle {
     pub fn subscribe_updates(&self) -> Synced {
         Synced(self.tx_updates.subscribe())
     }
@@ -73,14 +92,20 @@ impl ManagedMarketdata {
             by_rfq: FxHashMap::default(),
             by_sub_id: FxHashMap::default(),
         }));
+        let dval_handles = Arc::new(Mutex::new(DvalHandles {
+            by_market_and_path_leaf: FxHashMap::default(),
+            by_sub_id: FxHashMap::default(),
+        }));
         let (tx, mut rx) = mpsc::channel::<Pooled<Vec<(SubId, Event)>>>(10000);
         let handle = {
             let book_handles = book_handles.clone();
             let rfq_handles = rfq_handles.clone();
+            let dval_handles = dval_handles.clone();
             let f = async move {
                 'outer: while let Some(mut batch) = rx.next().await {
                     let mut book_handles = book_handles.lock().await;
                     let mut rfq_handles = rfq_handles.lock().await;
+                    let mut dval_handles = dval_handles.lock().await;
                     for (id, event) in batch.drain(..) {
                         if let Some(book) =
                             book_handles.by_sub_id.get_mut(&id).and_then(|w| w.upgrade())
@@ -88,6 +113,18 @@ impl ManagedMarketdata {
                             if let Err(e) = book.lock().await.process_event(event) {
                                 error!("error processing book event: {}", e);
                                 break 'outer;
+                            }
+                        } else if let Some(handle) =
+                            dval_handles.by_sub_id.get_mut(&id).and_then(|w| w.upgrade())
+                        {
+                            match event {
+                                Event::Unsubscribed => {}
+                                Event::Update(v) => {
+                                    let mut handle = handle.lock().await;
+                                    handle.last_value = Some(v);
+                                    handle.synced += 1;
+                                    handle.tx_updates.send_replace(handle.synced);
+                                }
                             }
                         } else if let Some(rfq) =
                             rfq_handles.by_sub_id.get_mut(&id).and_then(|w| w.upgrade())
@@ -125,6 +162,7 @@ impl ManagedMarketdata {
         Self {
             book_handles,
             rfq_handles,
+            dval_handles,
             common,
             _subscription_driver: Some(handle),
             subscription_tx: tx,
@@ -140,6 +178,10 @@ impl ManagedMarketdata {
             })),
             rfq_handles: Arc::new(Mutex::new(RfqHandles {
                 by_rfq: FxHashMap::default(),
+                by_sub_id: FxHashMap::default(),
+            })),
+            dval_handles: Arc::new(Mutex::new(DvalHandles {
+                by_market_and_path_leaf: FxHashMap::default(),
                 by_sub_id: FxHashMap::default(),
             })),
             common,
@@ -170,6 +212,47 @@ impl ManagedMarketdata {
         book_handles.by_market.insert(market, Arc::downgrade(&book_client));
         book_handles.by_sub_id.insert(sub_id, Arc::downgrade(&book_client));
         (book_client, synced)
+    }
+
+    pub async fn subscribe_path(
+        &self,
+        market: Market,
+        path_leaf: String,
+    ) -> Result<(Arc<Mutex<DvalHandle>>, Synced)> {
+        let path =
+            self.common.paths.marketdata_rt_by_name(market).append(path_leaf.as_str());
+        let (handle, synced) = {
+            let mut dval_handles = self.dval_handles.lock().await;
+            if let Some(existing) = dval_handles
+                .by_market_and_path_leaf
+                .get(&(market, path_leaf.clone()))
+                .and_then(|w| w.upgrade())
+            {
+                let synced = existing.lock().await.subscribe_updates();
+                return Ok((existing, synced));
+            }
+            let (tx_updates, rx_updates) = watch::channel(0);
+            let handle = Arc::new(Mutex::new(DvalHandle {
+                sub: None,
+                synced: 0,
+                tx_updates,
+                last_value: None,
+            }));
+            dval_handles
+                .by_market_and_path_leaf
+                .insert((market, path_leaf), Arc::downgrade(&handle));
+            (handle, Synced(rx_updates))
+        };
+        let dval = self.common.subscriber.subscribe(path);
+        let sub_id = dval.id();
+        dval.updates(UpdatesFlags::BEGIN_WITH_LAST, self.subscription_tx.clone());
+        {
+            let mut handle = handle.lock().await;
+            handle.sub = Some(dval);
+        }
+        let mut dval_handles = self.dval_handles.lock().await;
+        dval_handles.by_sub_id.insert(sub_id, Arc::downgrade(&handle));
+        Ok((handle, synced))
     }
 
     pub async fn subscribe_rfq(
