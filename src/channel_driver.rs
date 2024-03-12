@@ -1,7 +1,6 @@
 //! Core channel driver--wraps the underlying netidx pack_channel with
 //! useful specialized functions.
 
-use crate::Common;
 use anyhow::{anyhow, bail, Result};
 use api::{
     utils::messaging::MaybeRequest, Address, ComponentId, Envelope, MaybeSplit, Stamp,
@@ -9,6 +8,7 @@ use api::{
 };
 use futures_util::{select_biased, FutureExt};
 use log::{debug, error};
+use netidx::{path::Path, subscriber::Subscriber};
 use netidx_protocols::pack_channel;
 use std::sync::Arc;
 use tokio::{
@@ -20,6 +20,7 @@ static DEFAULT_CHANNEL_ID: u32 = 1;
 
 pub struct ChannelDriver {
     channel: Arc<pack_channel::client::Connection>,
+    channel_path: Path,
     src: Address,
     tx: broadcast::Sender<Arc<Vec<Envelope<TypedMessage>>>>,
     _rx: broadcast::Receiver<Arc<Vec<Envelope<TypedMessage>>>>,
@@ -27,14 +28,15 @@ pub struct ChannelDriver {
 }
 
 impl ChannelDriver {
-    pub async fn connect(common: &Common, channel_id: Option<u32>) -> Result<Self> {
+    pub async fn connect(
+        subscriber: &Subscriber,
+        channel_path: Path,
+        channel_id: Option<u32>,
+    ) -> Result<Self> {
         let channel_id = channel_id.unwrap_or(DEFAULT_CHANNEL_ID);
         let channel = Arc::new(
-            pack_channel::client::Connection::connect(
-                &common.subscriber,
-                common.paths.channel(),
-            )
-            .await?,
+            pack_channel::client::Connection::connect(subscriber, channel_path.clone())
+                .await?,
         );
         debug!("beginning channel handshake, channel_id = {}", channel_id);
         channel.send_one(&channel_id)?;
@@ -66,7 +68,14 @@ impl ChannelDriver {
                 }
             })
         };
-        Ok(Self { channel, src, tx, _rx: rx, close: Some((close_tx, join)) })
+        Ok(Self {
+            channel,
+            channel_path,
+            src,
+            tx,
+            _rx: rx,
+            close: Some((close_tx, join)),
+        })
     }
 
     /// Close the channel, waiting for all queued messages to send
@@ -78,6 +87,10 @@ impl ChannelDriver {
         } else {
             bail!("channel already closed")
         }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.channel_path
     }
 
     pub fn src(&self) -> Address {

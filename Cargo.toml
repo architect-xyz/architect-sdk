@@ -23,6 +23,7 @@ fxhash = { workspace = true }
 immutable-chunkmap = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
+maybe-owned = { workspace = true }
 md-5 = { workspace = true }
 netidx = { workspace = true }
 netidx-archive = { workspace = true }

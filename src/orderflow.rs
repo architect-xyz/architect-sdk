@@ -27,15 +27,14 @@ impl OrderflowClient {
         order_id_range: Option<u64>,
         target: Option<ComponentId>,
     ) -> Result<Self> {
-        let order_ids: AtomicOrderIdAllocator =
-            OrderIdAllocator::get_allocation_with_driver(
-                &common,
-                &driver,
-                order_authority,
-                order_id_range,
-            )
-            .await?
-            .into();
+        let order_ids: AtomicOrderIdAllocator = OrderIdAllocator::get_allocation(
+            &common,
+            Some(&driver),
+            order_authority,
+            order_id_range,
+        )
+        .await?
+        .into();
         let target = target
             .or_else(|| {
                 info!("no target specified; searching for an Oms in config...");

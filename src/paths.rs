@@ -1,4 +1,5 @@
 use crate::symbology::{market::ExchangeMarketKind, Cpty, Market, MarketKind};
+use anyhow::{bail, Result};
 use api::{marketdata::NetidxFeedPaths, symbology::CptyId, ComponentId};
 use fxhash::{FxHashMap, FxHashSet};
 use netidx::path::Path;
@@ -172,15 +173,14 @@ impl Paths {
     }
 
     /// Find the most direct channel for a given component
-    pub fn component(&self, com: ComponentId) -> Option<Path> {
-        let channel_base = if self.local_components.contains(&com) {
-            Some(&self.core_base)
+    pub fn component(&self, com: ComponentId) -> Result<Path> {
+        if self.local_components.contains(&com) {
+            Ok(self.core_base.append("channel"))
         } else if let Some(base) = self.remote_components.get(&com) {
-            Some(base)
+            Ok(base.append("channel"))
         } else {
-            None
-        };
-        channel_base.map(|base| base.append("channel"))
+            bail!("no path to component {}", com);
+        }
     }
 
     /// UserDB (licensing, registration, etc.)
