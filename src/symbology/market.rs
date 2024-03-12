@@ -61,6 +61,14 @@ impl Market {
     pub fn cpty(&self) -> Cpty {
         Cpty { venue: self.venue, route: self.route }
     }
+
+    pub fn base(&self) -> Option<Product> {
+        if let MarketKind::Exchange(ExchangeMarketKind { base, .. }) = &self.kind {
+            Some(*base)
+        } else {
+            None
+        }
+    }
 }
 
 impl NetidxFeedPaths for Market {

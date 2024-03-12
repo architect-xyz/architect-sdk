@@ -133,6 +133,26 @@ impl ProductKind {
         }
     }
 
+    pub fn expiration(&self) -> Option<DateTime<Utc>> {
+        match self {
+            ProductKind::Future { expiration, .. }
+            | ProductKind::Option { expiration, .. } => *expiration,
+            ProductKind::FutureSpread { same_side_leg, opp_side_leg } => {
+                // We need to return the expiration which occurs first
+                // CR mholm for alee: could recurse infinitely
+                std::cmp::min(
+                    same_side_leg.and_then(|p| p.kind.expiration()),
+                    opp_side_leg.and_then(|p| p.kind.expiration()),
+                )
+            }
+            _ => None,
+        }
+    }
+
+    pub fn is_expired(&self, now: &DateTime<Utc>) -> bool {
+        self.expiration().is_some_and(|exp| exp.date_naive() < now.date_naive())
+    }
+
     // /// return the option direction, or None if the product isn't an
     // /// option.
     // pub fn option_dir(&self) -> Option<OptionDir> {
