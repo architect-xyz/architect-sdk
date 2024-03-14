@@ -153,6 +153,12 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
+    /// Marketdata snaphots and USD marks service
+    pub fn marketdata_snapshots(&self, local: bool) -> Path {
+        let base = if local { &self.local_base } else { &self.hosted_base };
+        base.append("marketdata").append("snapshots")
+    }
+
     pub fn marketdata_marks(&self) -> Path {
         self.local_base.append("qf").append("marks")
     }

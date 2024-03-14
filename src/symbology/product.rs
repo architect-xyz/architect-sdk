@@ -133,6 +133,10 @@ impl ProductKind {
         }
     }
 
+    pub fn is_option(&self) -> bool {
+        matches!(self, ProductKind::Option { .. })
+    }
+
     pub fn expiration(&self) -> Option<DateTime<Utc>> {
         match self {
             ProductKind::Future { expiration, .. }

@@ -6,6 +6,7 @@ use api::{
 use chrono::prelude::*;
 use itertools::Itertools;
 use netidx::pool::Pooled;
+use netidx_derive::Pack;
 use rust_decimal::Decimal;
 use std::{
     collections::{btree_map::Iter, BTreeMap},
@@ -79,7 +80,7 @@ impl<'a> Iterator for LevelIterator<'a> {
 }
 
 /// An order book
-#[derive(Debug)]
+#[derive(Debug, Pack)]
 pub struct LevelBook {
     pub book: DirPair<BTreeMap<Decimal, Decimal>>,
     pub timestamp: DateTime<Utc>,
