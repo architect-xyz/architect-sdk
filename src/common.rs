@@ -229,6 +229,23 @@ impl Common {
             .ok_or_else(|| anyhow!("no component of kind: {}", kind))
     }
 
+    pub fn all_components_of_kind(&self, kind: &str) -> Vec<ComponentId> {
+        let mut res = Vec::new();
+        for (com, (k, _)) in self.config.local.iter() {
+            if k == kind {
+                res.push(*com);
+            }
+        }
+        for (_, coms) in self.config.remote.iter() {
+            for (com, k) in coms.iter() {
+                if k == kind {
+                    res.push(*com);
+                }
+            }
+        }
+        res
+    }
+
     /// Convenience function to initialize symbology from [Common]
     pub async fn start_symbology(&self, write: bool) -> crate::symbology::client::Client {
         crate::symbology::client::Client::start(
