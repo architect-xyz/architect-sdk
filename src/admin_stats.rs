@@ -1,7 +1,7 @@
 //! Netidx-based stats/metrics publishing library, for admin monitoring
 
 use crate::Common;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use arcstr::ArcStr;
 use chrono::Utc;
 use futures::{
@@ -16,7 +16,7 @@ use netidx::{
     publisher::{Publisher, UpdateBatch, Val, Value},
 };
 use once_cell::sync::OnceCell;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
 use tokio::time::interval;
 
@@ -418,6 +418,63 @@ pub fn my_hostname() -> Result<ArcStr> {
     }
 }
 
+/// Standalone version of admin stats
+#[derive(Clone, Debug)]
+pub struct AdminStats {
+    stats_tx: Arc<mpsc::UnboundedSender<(Path, StatCmd)>>,
+}
+
+impl AdminStats {
+    pub fn start(publisher: &Publisher, base_path: Path, service: &str) -> Result<Self> {
+        let (log_tx, log_rx) = mpsc::channel(3);
+        let ll_relpath = Path::from("log-level");
+        let ll_paths =
+            full_and_alias_paths(base_path.clone(), service, ll_relpath.clone())?;
+        let (ll_path, ll_alias1, ll_alias2) = ll_paths;
+        let ll_val = publisher.publish(ll_path, log::max_level().to_string())?;
+        let () = publisher.alias(ll_val.id(), ll_alias1)?;
+        let () = publisher.alias(ll_val.id(), ll_alias2)?;
+        publisher.writes(ll_val.id(), log_tx);
+        let (stats_tx, stats_rx) = mpsc::unbounded();
+        start_listener_task(
+            base_path.clone(),
+            service,
+            log_rx,
+            stats_rx,
+            publisher.clone(),
+            ll_val,
+        );
+        Ok(Self { stats_tx: Arc::new(stats_tx) })
+    }
+
+    fn stat_cmd(&self, path: impl Into<Path>, cmd: StatCmd) {
+        match self.stats_tx.unbounded_send((path.into(), cmd)) {
+            Ok(()) => (),
+            Err(e) => debug!("couldn't send stat: {}", e.to_string()),
+        }
+    }
+
+    pub fn set(&self, path: impl Into<Path>, stat: impl Into<Value>) {
+        self.stat_cmd(path, StatCmd::Set(stat.into()))
+    }
+
+    pub fn add_acc(&self, path: impl Into<Path>, stat: impl Into<Value>) {
+        self.stat_cmd(path, StatCmd::AddAcc(stat.into()))
+    }
+
+    pub fn sub_acc(&self, path: impl Into<Path>, stat: impl Into<Value>) {
+        self.stat_cmd(path, StatCmd::SubAcc(stat.into()))
+    }
+
+    pub fn mul_acc(&self, path: impl Into<Path>, stat: impl Into<Value>) {
+        self.stat_cmd(path, StatCmd::MulAcc(stat.into()))
+    }
+
+    pub fn div_acc(&self, path: impl Into<Path>, stat: impl Into<Value>) {
+        self.stat_cmd(path, StatCmd::DivAcc(stat.into()))
+    }
+}
+
 /// Attach the stats system to [Common]
 impl Common {
     /// Initialize the stats system for publishing statistics under
@@ -430,41 +487,11 @@ impl Common {
             self.paths.hosted_base.clone()
         };
         let publisher = self.publisher.clone();
-
-        let (log_tx, log_rx) = mpsc::channel(3);
-        let ll_relpath = Path::from("log-level");
-        let ll_paths =
-            full_and_alias_paths(base_path.clone(), service, ll_relpath.clone())?;
-        let (ll_path, ll_alias1, ll_alias2) = ll_paths;
-        let ll_val = publisher.publish(ll_path, log::max_level().to_string())?;
-        let () = publisher.alias(ll_val.id(), ll_alias1)?;
-        let () = publisher.alias(ll_val.id(), ll_alias2)?;
-        publisher.writes(ll_val.id(), log_tx);
-
-        let (stats_tx, stats_rx) = mpsc::unbounded();
-
-        if let Ok(()) = self.stats.set(stats_tx) {
-            start_listener_task(
-                base_path.clone(),
-                service,
-                log_rx,
-                stats_rx,
-                self.publisher.clone(),
-                ll_val,
-            );
-            Ok(())
-        } else {
-            Err(anyhow!("init_stats: stats was already initialized!"))
+        if let Err(_) = self.stats.set(AdminStats::start(&publisher, base_path, service)?)
+        {
+            bail!("init_stats: stats was already initialized!");
         }
-    }
-
-    fn stat_cmd(&self, path: impl Into<Path>, cmd: StatCmd) {
-        if let Some(tx) = self.stats.get() {
-            match tx.unbounded_send((path.into(), cmd)) {
-                Ok(()) => (),
-                Err(e) => debug!("couldn't send stat: {}", e.to_string()),
-            }
-        }
+        Ok(())
     }
 
     /// Publishes a stat. Stats are published under ${base}/admin by component and by host
@@ -472,31 +499,41 @@ impl Common {
     /// # Arguments
     /// * `path` - a relative path describing this stat
     /// * `stat` - the value of this stat
-    pub fn stat(&self, path: impl Into<Path>, stat: impl Into<Value>) {
-        self.stat_cmd(path, StatCmd::Set(stat.into()))
+    pub fn stat_set(&self, path: impl Into<Path>, stat: impl Into<Value>) {
+        if let Some(stats) = self.stats.get() {
+            stats.set(path, stat)
+        }
     }
 
     /// Add accumulates an existing stat. If the existing stat is not initialized
     /// then it assumed to be zero.
     pub fn stat_add_acc(&self, path: impl Into<Path>, stat: impl Into<Value>) {
-        self.stat_cmd(path, StatCmd::AddAcc(stat.into()))
+        if let Some(stats) = self.stats.get() {
+            stats.add_acc(path, stat)
+        }
     }
 
     /// Sutract accumulates an existing stat. If the existing stat is not initialized
     /// then it is assumed to be zero.
     pub fn stat_sub_acc(&self, path: impl Into<Path>, stat: impl Into<Value>) {
-        self.stat_cmd(path, StatCmd::SubAcc(stat.into()))
+        if let Some(stats) = self.stats.get() {
+            stats.sub_acc(path, stat)
+        }
     }
 
     /// Multiply accumulates an existing stat. If the existing stat is not initialized
     /// then it assumed to be zero
     pub fn stat_mul_acc(&self, path: impl Into<Path>, stat: impl Into<Value>) {
-        self.stat_cmd(path, StatCmd::MulAcc(stat.into()))
+        if let Some(stats) = self.stats.get() {
+            stats.mul_acc(path, stat)
+        }
     }
 
     /// Divide accumulates an existing stat. If the existing stat is not initialized
     /// then it is assumed to be zero
     pub fn stat_div_acc(&self, path: impl Into<Path>, stat: impl Into<Value>) {
-        self.stat_cmd(path, StatCmd::DivAcc(stat.into()))
+        if let Some(stats) = self.stats.get() {
+            stats.div_acc(path, stat)
+        }
     }
 }

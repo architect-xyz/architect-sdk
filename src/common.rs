@@ -1,4 +1,4 @@
-use crate::{admin_stats::StatCmd, Paths};
+use crate::{admin_stats::AdminStats, Paths};
 use anyhow::{anyhow, bail, Context, Result};
 use api::{symbology::CptyId, ComponentId, Config};
 use fxhash::{FxHashMap, FxHashSet};
@@ -102,7 +102,7 @@ impl Common {
                 local_components,
                 remote_components,
                 use_local_symbology: f.use_local_symbology,
-                use_local_userdb: f.use_local_userdb,
+                use_local_licensedb: f.use_local_licensedb,
                 use_local_marketdata,
                 use_legacy_marketdata,
                 use_legacy_hist_marketdata,
@@ -281,5 +281,5 @@ pub struct CommonInner {
     /// The path map
     pub paths: Paths,
     /// Optional admin_stats support
-    pub(crate) stats: OnceCell<futures::channel::mpsc::UnboundedSender<(Path, StatCmd)>>,
+    pub stats: OnceCell<AdminStats>,
 }
