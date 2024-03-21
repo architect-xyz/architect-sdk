@@ -10,72 +10,128 @@ use futures_util::{select_biased, FutureExt};
 use log::{debug, error};
 use netidx::{path::Path, subscriber::Subscriber};
 use netidx_protocols::pack_channel;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::{
-    sync::{broadcast, oneshot},
+    sync::{broadcast, oneshot, watch},
     task,
 };
 
 static DEFAULT_CHANNEL_ID: u32 = 1;
 
-pub struct ChannelDriver {
+struct Channel {
     channel: Arc<pack_channel::client::Connection>,
-    channel_path: Path,
     src: Address,
+}
+
+pub struct ChannelDriver {
+    channel: Arc<RwLock<Option<Channel>>>,
+    channel_ready: watch::Receiver<bool>,
+    channel_path: Path,
     tx: broadcast::Sender<Arc<Vec<Envelope<TypedMessage>>>>,
     _rx: broadcast::Receiver<Arc<Vec<Envelope<TypedMessage>>>>,
     close: Option<(oneshot::Sender<()>, task::JoinHandle<()>)>,
 }
 
 impl ChannelDriver {
-    pub async fn connect(
+    pub fn new(
         subscriber: &Subscriber,
         channel_path: Path,
         channel_id: Option<u32>,
-    ) -> Result<Self> {
-        let channel_id = channel_id.unwrap_or(DEFAULT_CHANNEL_ID);
-        let channel = Arc::new(
-            pack_channel::client::Connection::connect(subscriber, channel_path.clone())
-                .await?,
-        );
-        debug!("beginning channel handshake, channel_id = {}", channel_id);
-        channel.send_one(&channel_id)?;
-        let src: Address = channel.recv_one().await?;
-        debug!("channel handshake complete, channel = {}", src);
-        let (close_tx, close_rx) = oneshot::channel();
+    ) -> Self {
+        let channel = Arc::new(RwLock::new(None));
+        let (mut channel_ready_tx, channel_ready_rx) = watch::channel(false);
+        let (close_tx, mut close_rx) = oneshot::channel();
         let (tx, rx) = broadcast::channel(1000);
-        let join = {
+        let channel_task = {
+            let subscriber = subscriber.clone();
+            let channel_path = channel_path.clone();
             let channel = channel.clone();
             let tx = tx.clone();
-            task::spawn(async move {
-                let mut messages: Vec<Envelope<TypedMessage>> = vec![];
-                let mut close_rx = close_rx.fuse();
-                loop {
-                    let mut closed = false;
-                    select_biased! {
-                        _ = &mut close_rx => { closed = true; },
-                        _ = channel.recv(|m| { messages.push(m); true }).fuse() => {}
-                    }
-                    let buf = std::mem::replace(&mut messages, Vec::new());
-                    if !buf.is_empty() {
-                        if let Err(e) = tx.send(Arc::new(buf)) {
-                            error!("channel driver send error, dropping: {}", e);
+            task::spawn({
+                async move {
+                    loop {
+                        let res = Self::connect_inner(
+                            &subscriber,
+                            channel_path.clone(),
+                            channel_id,
+                            channel.clone(),
+                            &mut channel_ready_tx,
+                            &mut close_rx,
+                            tx.clone(),
+                        )
+                        .await;
+                        channel_ready_tx.send_replace(false);
+                        if let Err(e) = res {
+                            error!("channel driver error, reconnecting in 1s: {}", e);
+                            let delay = std::time::Duration::from_secs(1);
+                            tokio::time::sleep(delay).await;
+                        } else {
+                            // graceful shutdown
+                            break;
                         }
-                    }
-                    if closed {
-                        break;
                     }
                 }
             })
         };
-        Ok(Self {
+        Self {
             channel,
+            channel_ready: channel_ready_rx,
             channel_path,
-            src,
             tx,
             _rx: rx,
-            close: Some((close_tx, join)),
-        })
+            close: Some((close_tx, channel_task)),
+        }
+    }
+
+    async fn connect_inner(
+        subscriber: &Subscriber,
+        channel_path: Path,
+        channel_id: Option<u32>,
+        channel: Arc<RwLock<Option<Channel>>>,
+        channel_ready_tx: &mut watch::Sender<bool>,
+        close_rx: &mut oneshot::Receiver<()>,
+        tx: broadcast::Sender<Arc<Vec<Envelope<TypedMessage>>>>,
+    ) -> Result<()> {
+        let channel_id = channel_id.unwrap_or(DEFAULT_CHANNEL_ID);
+        let conn = Arc::new(
+            pack_channel::client::Connection::connect(subscriber, channel_path.clone())
+                .await?,
+        );
+        debug!("beginning channel handshake, channel_id = {}", channel_id);
+        conn.send_one(&channel_id)?;
+        let src: Address = conn.recv_one().await?;
+        {
+            if let Ok(mut channel) = channel.write() {
+                *channel = Some(Channel { channel: conn.clone(), src: src.clone() });
+            } else {
+                bail!("BUG: channel ready lock poisoned");
+            }
+        }
+        channel_ready_tx.send_replace(true);
+        debug!("channel handshake complete, channel = {}", src);
+        let mut messages: Vec<Envelope<TypedMessage>> = vec![];
+        let mut close_rx = close_rx.fuse();
+        loop {
+            let mut closed = false;
+            select_biased! {
+                _ = &mut close_rx => { closed = true; },
+                _ = conn.recv(|m| { messages.push(m); true }).fuse() => {}
+            }
+            let buf = std::mem::replace(&mut messages, Vec::new());
+            if !buf.is_empty() {
+                if let Err(e) = tx.send(Arc::new(buf)) {
+                    error!("channel driver send error, dropping: {}", e);
+                }
+            }
+            if closed {
+                break Ok(())
+            }
+        }
+    }
+
+    pub async fn wait_connected(&mut self) -> Result<()> {
+        let _ = self.channel_ready.wait_for(|ready| *ready).await?;
+        Ok(())
     }
 
     /// Close the channel, waiting for all queued messages to send
@@ -93,13 +149,20 @@ impl ChannelDriver {
         &self.channel_path
     }
 
-    pub fn src(&self) -> Address {
-        self.src
-    }
-
     /// Access to the underlying netidx pack_channel connection
-    pub fn channel(&self) -> &pack_channel::client::Connection {
-        &self.channel
+    pub fn with_channel<R>(
+        &self,
+        f: impl FnOnce(&pack_channel::client::Connection, Address) -> R,
+    ) -> Result<R> {
+        if let Ok(cr) = self.channel.read() {
+            if let Some(cr) = &*cr {
+                Ok(f(&cr.channel, cr.src.clone()))
+            } else {
+                bail!("channel not ready")
+            }
+        } else {
+            bail!("channel ready lock poisoned")
+        }
     }
 
     // CR alee: probably want to give these type signatures some more thought;
@@ -109,12 +172,14 @@ impl ChannelDriver {
     where
         M: Into<TypedMessage>,
     {
-        self.channel.send_one(&Envelope {
-            src: self.src,
-            dst: Address::Component(dst),
-            stamp: Stamp::default(),
-            msg: msg.into(),
-        })
+        self.with_channel(|conn, src| {
+            conn.send_one(&Envelope {
+                src,
+                dst: Address::Component(dst),
+                stamp: Stamp::default(),
+                msg: msg.into(),
+            })
+        })?
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Arc<Vec<Envelope<TypedMessage>>>> {

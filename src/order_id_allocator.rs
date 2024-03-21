@@ -89,14 +89,15 @@ impl OrderIdAllocator {
                 }
                 MaybeOwned::Borrowed(driver)
             }
-            None => MaybeOwned::Owned(
-                ChannelDriver::connect(
+            None => {
+                let mut driver = ChannelDriver::new(
                     &common.subscriber,
                     common.paths.component(order_authority).unwrap(),
                     None,
-                )
-                .await?,
-            ),
+                );
+                driver.wait_connected().await?;
+                MaybeOwned::Owned(driver)
+            }
         };
         let allocation: OrderIdAllocation = driver
             .request_and_wait_for(

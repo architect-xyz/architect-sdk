@@ -28,14 +28,14 @@ impl OmsClient {
         order_id_range: Option<u64>,
         target: Option<ComponentId>,
     ) -> Result<Self> {
-        let orderflow = OrderflowClient::connect(
+        let mut orderflow = OrderflowClient::new(
             &common,
             driver,
             order_authority,
             order_id_range,
             target,
-        )
-        .await?;
+        )?;
+        orderflow.wait_allocated().await?;
         Ok(Self {
             orderflow,
             last_order_update: FxHashMap::default(),
