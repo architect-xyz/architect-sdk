@@ -80,7 +80,7 @@ impl OrderIdAllocator {
                 common.get_local_component_of_kind("OrderAuthority")
             })
             .ok_or_else(|| anyhow!("no order authority found"))?;
-        let order_authority_path = common.paths.component(order_authority)?;
+        let order_authority_path = common.paths.channel(Some(order_authority))?;
         let order_id_range = order_id_range.unwrap_or(0x100000);
         let driver = match driver {
             Some(driver) => {
@@ -92,7 +92,7 @@ impl OrderIdAllocator {
             None => {
                 let mut driver = ChannelDriver::new(
                     &common.subscriber,
-                    common.paths.component(order_authority).unwrap(),
+                    common.paths.channel(Some(order_authority)).unwrap(),
                     None,
                 );
                 driver.wait_connected().await?;

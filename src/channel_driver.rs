@@ -124,7 +124,7 @@ impl ChannelDriver {
                 }
             }
             if closed {
-                break Ok(())
+                break Ok(());
             }
         }
     }

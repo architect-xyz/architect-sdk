@@ -1,5 +1,5 @@
 use crate::symbology::{market::ExchangeMarketKind, Cpty, Market, MarketKind};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use api::{marketdata::NetidxFeedPaths, symbology::CptyId, ComponentId};
 use fxhash::{FxHashMap, FxHashSet};
 use netidx::path::Path;
@@ -12,6 +12,7 @@ pub struct Paths {
     pub core_base: Path,
     pub local_components: FxHashSet<ComponentId>,
     pub remote_components: FxHashMap<ComponentId, Path>,
+    pub component_kind: FxHashMap<ComponentId, String>,
     pub use_local_symbology: bool,
     pub use_local_licensedb: bool,
     pub use_local_marketdata: FxHashSet<CptyId>,
@@ -168,9 +169,21 @@ impl Paths {
         self.core_base.clone()
     }
 
-    /// Channel for the core started by this config file
-    pub fn channel(&self) -> Path {
-        self.core_base.append("channel")
+    /// Channel path; if com = None, then this core; if com is some component,
+    /// then find the component's core and return its channel path
+    pub fn channel(&self, com: Option<ComponentId>) -> Result<Path> {
+        match com {
+            None => Ok(self.core_base.append("channel")),
+            Some(com) => {
+                if self.local_components.contains(&com) {
+                    Ok(self.core_base.append("channel"))
+                } else if let Some(base) = self.remote_components.get(&com) {
+                    Ok(base.append("channel"))
+                } else {
+                    bail!("no path to component {}", com);
+                }
+            }
+        }
     }
 
     /// One-way write-only channel for core-to-core communication
@@ -178,15 +191,23 @@ impl Paths {
         self.core_base.append("in-channel")
     }
 
-    /// Find the most direct channel for a given component
-    pub fn component(&self, com: ComponentId) -> Result<Path> {
-        if self.local_components.contains(&com) {
-            Ok(self.core_base.append("channel"))
+    /// Component RPC mount path and alias
+    pub fn component(&self, com: ComponentId) -> Result<(Path, Path)> {
+        let kind = self
+            .component_kind
+            .get(&com)
+            .ok_or_else(|| anyhow!("BUG: unknown component kind for {}", com))?;
+        let base = if self.local_components.contains(&com) {
+            self.local_base.clone()
         } else if let Some(base) = self.remote_components.get(&com) {
-            Ok(base.append("channel"))
+            base.clone()
         } else {
-            bail!("no path to component {}", com);
-        }
+            bail!("BUG: unknown component {}", com);
+        };
+        Ok((
+            base.append("components").append(&com.to_string()),
+            base.append("components").append(kind).append(&com.to_string()),
+        ))
     }
 
     /// License server

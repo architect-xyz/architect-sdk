@@ -65,12 +65,17 @@ impl Common {
             .await?;
         debug!("creating subscriber");
         let subscriber = Subscriber::new(netidx_config.clone(), desired_auth.clone())?;
+        let mut component_kind = FxHashMap::default();
         let local_components: FxHashSet<ComponentId> =
             f.local.keys().map(|k| *k).collect();
+        for (com, (kind, _)) in f.local.iter() {
+            component_kind.insert(*com, kind.clone());
+        }
         let mut remote_components: FxHashMap<ComponentId, Path> = FxHashMap::default();
         for (path, coms) in f.remote.iter() {
-            for (com, _) in coms.iter() {
+            for (com, kind) in coms.iter() {
                 remote_components.insert(*com, path.clone());
+                component_kind.insert(*com, kind.clone());
             }
         }
         let mut use_local_marketdata = FxHashSet::default();
@@ -101,6 +106,7 @@ impl Common {
                 core_base: f.core_base,
                 local_components,
                 remote_components,
+                component_kind,
                 use_local_symbology: f.use_local_symbology,
                 use_local_licensedb: f.use_local_licensedb,
                 use_local_marketdata,
