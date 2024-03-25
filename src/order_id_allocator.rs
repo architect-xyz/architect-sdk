@@ -90,7 +90,7 @@ impl OrderIdAllocator {
                 MaybeOwned::Borrowed(driver)
             }
             None => {
-                let mut driver = ChannelDriver::new(
+                let driver = ChannelDriver::new(
                     &common.subscriber,
                     common.paths.channel(Some(order_authority)).unwrap(),
                     None,

@@ -36,15 +36,16 @@ impl OrderflowClient {
             let driver = driver.clone();
             let order_ids_tx = order_ids_tx.clone();
             task::spawn(async move {
-                let order_ids: AtomicOrderIdAllocator = OrderIdAllocator::get_allocation(
+                driver.wait_connected().await?;
+                let order_ids = OrderIdAllocator::get_allocation(
                     &common,
                     Some(&driver),
                     order_authority,
                     order_id_range,
                 )
-                .await?
-                .into();
-                order_ids_tx.send(Some(order_ids))?;
+                .await?;
+                info!("order id range allocated: {:?}", order_ids);
+                order_ids_tx.send(Some(order_ids.into()))?;
                 Ok::<_, anyhow::Error>(())
             });
         }

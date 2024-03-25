@@ -129,8 +129,9 @@ impl ChannelDriver {
         }
     }
 
-    pub async fn wait_connected(&mut self) -> Result<()> {
-        let _ = self.channel_ready.wait_for(|ready| *ready).await?;
+    pub async fn wait_connected(&self) -> Result<()> {
+        let mut channel_ready = self.channel_ready.clone();
+        let _ = channel_ready.wait_for(|ready| *ready).await?;
         Ok(())
     }
 
