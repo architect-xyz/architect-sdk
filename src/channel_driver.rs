@@ -4,7 +4,7 @@
 use anyhow::{anyhow, bail, Result};
 use api::{
     utils::messaging::MaybeRequest, Address, ComponentId, Envelope, MaybeSplit, Stamp,
-    TypedMessage,
+    TypedMessage, UserId,
 };
 use futures_util::{select_biased, FutureExt};
 use log::{debug, error};
@@ -148,6 +148,19 @@ impl ChannelDriver {
 
     pub fn path(&self) -> &Path {
         &self.channel_path
+    }
+
+    pub fn user_id(&self) -> Result<UserId> {
+        let channel =
+            self.channel.read().map_err(|_| anyhow!("channel ready lock poisoned"))?;
+        if let Some(channel) = &*channel {
+            match channel.src {
+                Address::Channel(user_id, _) => Ok(user_id),
+                _ => bail!("channel not a user channel"),
+            }
+        } else {
+            bail!("channel not ready")
+        }
     }
 
     /// Access to the underlying netidx pack_channel connection
