@@ -266,7 +266,16 @@ impl Txn {
             }
             L::Fiat => ProductKind::Fiat,
             L::Equity => ProductKind::Equity,
-            L::Perpetual => ProductKind::Perpetual,
+            L::Perpetual { underlying, multiplier } => ProductKind::Perpetual {
+                underlying: match underlying {
+                    None => None,
+                    Some(underlying) => Some(
+                        self.get_product_by_id(&underlying)
+                            .ok_or_else(|| anyhow!("no such underlying"))?,
+                    ),
+                },
+                multiplier,
+            },
             L::Future { underlying, multiplier, expiration } => ProductKind::Future {
                 underlying: match underlying {
                     None => None,

@@ -85,10 +85,11 @@ impl MarketIndex {
                     i,
                 );
                 match x.base.kind {
-                    ProductKind::Coin { .. }
-                    | ProductKind::Fiat
-                    | ProductKind::Equity
-                    | ProductKind::Perpetual => (),
+                    ProductKind::Perpetual { underlying, multiplier: _ } => {
+                        if let Some(underlying) = underlying {
+                            insert(&mut self.by_underlying, underlying, i);
+                        }
+                    }
                     ProductKind::Future { underlying, multiplier: _, expiration }
                     | ProductKind::Option { underlying, multiplier: _, expiration } => {
                         if let Some(underlying) = underlying {
@@ -106,7 +107,10 @@ impl MarketIndex {
                             insert(&mut self.by_underlying, leg, i);
                         }
                     }
-                    ProductKind::Index
+                    ProductKind::Coin { .. }
+                    | ProductKind::Fiat
+                    | ProductKind::Equity 
+                    | ProductKind::Index
                     | ProductKind::Commodity
                     | ProductKind::Unknown => (),
                 }
@@ -148,10 +152,11 @@ impl MarketIndex {
                     i,
                 );
                 match x.base.kind {
-                    ProductKind::Coin { .. }
-                    | ProductKind::Fiat
-                    | ProductKind::Equity
-                    | ProductKind::Perpetual => (),
+                    ProductKind::Perpetual { underlying, multiplier: _ } => {
+                        if let Some(underlying) = underlying {
+                            remove(&mut self.by_underlying, underlying, i);
+                        }
+                    }
                     ProductKind::Future { underlying, multiplier: _, expiration }
                     | ProductKind::Option { underlying, multiplier: _, expiration } => {
                         if let Some(underlying) = underlying {
@@ -169,7 +174,10 @@ impl MarketIndex {
                             remove(&mut self.by_underlying, leg, i);
                         }
                     }
-                    ProductKind::Index
+                    ProductKind::Coin { .. }
+                    | ProductKind::Fiat
+                    | ProductKind::Equity 
+                    | ProductKind::Index
                     | ProductKind::Commodity
                     | ProductKind::Unknown => (),
                 }

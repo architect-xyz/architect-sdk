@@ -77,7 +77,10 @@ pub enum ProductKind {
     },
     Fiat,
     Equity,
-    Perpetual,
+    Perpetual {
+        underlying: Option<Product>,
+        multiplier: Option<Decimal>,
+    },
     Future {
         underlying: Option<Product>,
         multiplier: Option<Decimal>,
@@ -104,7 +107,7 @@ impl ProductKind {
             ProductKind::Coin { .. } => "Coin",
             ProductKind::Fiat => "Fiat",
             ProductKind::Equity => "Equity",
-            ProductKind::Perpetual => "Perpetual",
+            ProductKind::Perpetual { .. } => "Perpetual",
             ProductKind::Future { .. } => "Future",
             ProductKind::FutureSpread { .. } => "FutureSpread",
             ProductKind::Option { .. } => "Option",
@@ -119,11 +122,11 @@ impl ProductKind {
             ProductKind::Coin { .. }
             | ProductKind::Fiat
             | ProductKind::Equity
-            | ProductKind::Perpetual
             | ProductKind::Index
             | ProductKind::Commodity
             | ProductKind::Unknown => {}
-            ProductKind::Future { underlying, .. }
+            ProductKind::Perpetual { underlying, .. }
+            | ProductKind::Future { underlying, .. }
             | ProductKind::Option { underlying, .. } => {
                 underlying.map(|p| f(&p));
             }
@@ -141,18 +144,17 @@ impl ProductKind {
     pub fn multiplier(&self) -> Decimal {
         let multiplier = match self {
             ProductKind::Future { multiplier, .. }
+            | ProductKind::Perpetual { multiplier, .. }
             | ProductKind::Option { multiplier, .. } => *multiplier,
             ProductKind::FutureSpread { same_side_leg, .. } => {
                 same_side_leg.map(|p| p.kind.multiplier())
             }
             ProductKind::Coin { .. }
-            | ProductKind::Fiat 
-            | ProductKind::Equity 
-            | ProductKind::Index 
-            | ProductKind::Commodity 
+            | ProductKind::Fiat
+            | ProductKind::Equity
+            | ProductKind::Index
+            | ProductKind::Commodity
             | ProductKind::Unknown => None,
-            // CR bharrison: wrong, missing multiplier
-            ProductKind::Perpetual => None
         };
         multiplier.unwrap_or(dec!(1))
     }
@@ -257,7 +259,12 @@ impl From<&ProductKind> for api::symbology::ProductKind {
             }
             ProductKind::Fiat => api::symbology::ProductKind::Fiat,
             ProductKind::Equity => api::symbology::ProductKind::Equity,
-            ProductKind::Perpetual => api::symbology::ProductKind::Perpetual,
+            ProductKind::Perpetual { underlying, multiplier } => {
+                api::symbology::ProductKind::Perpetual {
+                    underlying: underlying.map(|u| u.id),
+                    multiplier: *multiplier,
+                }
+            }
             ProductKind::Future { underlying, multiplier, expiration } => {
                 api::symbology::ProductKind::Future {
                     underlying: underlying.map(|u| u.id),
