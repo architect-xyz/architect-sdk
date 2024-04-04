@@ -14,6 +14,7 @@ use immutable_chunkmap::map::MapL as Map;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
@@ -135,6 +136,25 @@ impl ProductKind {
 
     pub fn is_option(&self) -> bool {
         matches!(self, ProductKind::Option { .. })
+    }
+
+    pub fn multiplier(&self) -> Decimal {
+        let multiplier = match self {
+            ProductKind::Future { multiplier, .. }
+            | ProductKind::Option { multiplier, .. } => *multiplier,
+            ProductKind::FutureSpread { same_side_leg, .. } => {
+                same_side_leg.map(|p| p.kind.multiplier())
+            }
+            ProductKind::Coin { .. }
+            | ProductKind::Fiat 
+            | ProductKind::Equity 
+            | ProductKind::Index 
+            | ProductKind::Commodity 
+            | ProductKind::Unknown => None,
+            // CR bharrison: wrong, missing multiplier
+            ProductKind::Perpetual => None
+        };
+        multiplier.unwrap_or(dec!(1))
     }
 
     pub fn expiration(&self) -> Option<DateTime<Utc>> {
