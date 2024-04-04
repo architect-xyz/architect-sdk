@@ -109,7 +109,7 @@ impl MarketIndex {
                     }
                     ProductKind::Coin { .. }
                     | ProductKind::Fiat
-                    | ProductKind::Equity 
+                    | ProductKind::Equity
                     | ProductKind::Index
                     | ProductKind::Commodity
                     | ProductKind::Unknown => (),
@@ -176,7 +176,7 @@ impl MarketIndex {
                     }
                     ProductKind::Coin { .. }
                     | ProductKind::Fiat
-                    | ProductKind::Equity 
+                    | ProductKind::Equity
                     | ProductKind::Index
                     | ProductKind::Commodity
                     | ProductKind::Unknown => (),
