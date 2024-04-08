@@ -88,7 +88,9 @@ impl Cpty {
     }
 
     pub fn find_by_id(id: &CptyId) -> Result<Self> {
-        Self::get_by_id(id).ok_or_else(|| anyhow!("missing cpty: {}", id))
+        let venue = Venue::find_by_id(&id.venue)?;
+        let route = Route::find_by_id(&id.route)?;
+        Ok(Self { venue, route })
     }
 
     pub fn id(&self) -> CptyId {

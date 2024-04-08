@@ -235,6 +235,23 @@ impl Common {
             .ok_or_else(|| anyhow!("no component of kind: {}", kind))
     }
 
+    pub fn all_components(&self, filter: impl Fn(&str) -> bool) -> Vec<ComponentId> {
+        let mut res = Vec::new();
+        for (com, (k, _)) in self.config.local.iter() {
+            if filter(k) {
+                res.push(*com);
+            }
+        }
+        for (_, coms) in self.config.remote.iter() {
+            for (com, k) in coms.iter() {
+                if filter(k) {
+                    res.push(*com);
+                }
+            }
+        }
+        res
+    }
+
     pub fn all_components_of_kind(&self, kind: &str) -> Vec<ComponentId> {
         let mut res = Vec::new();
         for (com, (k, _)) in self.config.local.iter() {
