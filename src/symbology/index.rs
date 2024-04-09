@@ -267,12 +267,17 @@ impl MarketIndex {
                             match exp {
                                 None => return false,
                                 Some(exp) => {
+                                    // CR-soon bharrison: I think this is a bug?
+                                    // We're inside `filter` so this is saying,
+                                    // we're *not* "Expired" if now is more than 8 hours
+                                    // past expiration...
                                     if exp < now - Duration::hours(8) {
                                         return false;
                                     }
                                 }
                             }
                         }
+                        // CR-soon bharrison: I think this is also incorrect
                         !t.extra_info.is_delisted()
                     })
                     .map(|t| *t)
