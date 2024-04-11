@@ -31,6 +31,7 @@ impl<T: Clone + 'static, const SZ: usize> StaticBumpAllocator<T, SZ> {
                 self,
                 Self { data: Vec::new().leak(), pos: 0, total: self.total, prev: None },
             );
+
             *self = Self {
                 data: Self::new_data(),
                 pos: 0,
@@ -41,6 +42,7 @@ impl<T: Clone + 'static, const SZ: usize> StaticBumpAllocator<T, SZ> {
         self.data[self.pos] = MaybeUninit::new(t);
         let t = unsafe { &*self.data[self.pos].as_ptr() };
         self.pos += 1;
+        self.total.fetch_add(1, Ordering::Relaxed);
         t
     }
 
