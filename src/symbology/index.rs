@@ -7,7 +7,7 @@ use api::{
     symbology::{
         market::NormalizedMarketInfo,
         query::{DateQ, Query},
-        RouteId, Symbolic, VenueId,
+        Symbolic,
     },
     Str,
 };
@@ -333,31 +333,30 @@ impl MarketIndex {
         self.all.clone()
     }
 
-    pub fn find_exactly_one_by_exchange_symbol(
+    pub fn find_exactly_one_by_exchange_symbol<S: AsRef<str> + Ord>(
         &self,
-        venue: VenueId,
-        route: RouteId,
-        exchange_symbol: Str,
+        venue: Venue,
+        route: Route,
+        exchange_symbol: S,
     ) -> Result<Market> {
         let res = self
             .by_exchange_symbol
-            .get(&exchange_symbol)
+            .get(exchange_symbol.as_ref())
             .cloned()
             .unwrap_or_else(Set::new);
-        let mut iter =
-            res.into_iter().filter(|m| m.venue.id == venue && m.route.id == route);
+        let mut iter = res.into_iter().filter(|m| m.venue == venue && m.route == route);
         let first = iter.next();
         if first.is_none() {
             bail!(
                 "no market with exchange symbol {} for venue {} and route {}",
-                exchange_symbol.as_str(),
+                exchange_symbol.as_ref(),
                 venue,
                 route
             )
         } else if iter.next().is_some() {
             bail!(
                 "more than one market with exchange symbol {} for venue {} and route {}",
-                exchange_symbol.as_str(),
+                exchange_symbol.as_ref(),
                 venue,
                 route
             )
@@ -368,17 +367,17 @@ impl MarketIndex {
 
     pub fn find_exactly_one_by_base_and_quote(
         &self,
-        venue: VenueId,
-        route: RouteId,
+        venue: Venue,
+        route: Route,
         base: Product,
         quote: Product,
     ) -> Result<Market> {
         let res = self.by_base.get(&base).cloned().unwrap_or_else(Set::new);
         let mut iter = res.into_iter().filter(|m| {
-            m.venue.id == venue
-                && m.route.id == route
+            m.venue == venue
+                && m.route == route
                 && match &m.kind {
-                    MarketKind::Exchange(e) => e.quote.id == quote.id,
+                    MarketKind::Exchange(e) => e.quote == quote,
                     _ => false,
                 }
         });

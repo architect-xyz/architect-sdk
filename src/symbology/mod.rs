@@ -22,6 +22,7 @@ pub mod product;
 pub mod static_ref;
 pub mod txn;
 
+pub use index::MarketIndex;
 pub use market::{Market, MarketKind};
 pub use product::{Product, ProductKind};
 pub use static_ref::StaticRef;

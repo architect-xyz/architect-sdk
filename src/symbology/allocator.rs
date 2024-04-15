@@ -1,4 +1,6 @@
-//! A global allocator for static data.
+//! A global allocator for static data.  Intended to emulate a global symbol table
+//! in Rust.  Reading is free, writing should be done through [Txn] which provides
+//! a mutex, as StaticBumpAllocator::insert isn't thread-safe.
 
 use portable_atomic::Ordering;
 use smallvec::SmallVec;
@@ -7,7 +9,7 @@ use std::{mem::MaybeUninit, sync::atomic::AtomicUsize};
 pub struct StaticBumpAllocator<T: Clone + 'static, const SZ: usize> {
     data: &'static mut [MaybeUninit<T>],
     pos: usize,
-    total: &'static AtomicUsize, // CR alee: does this work
+    total: &'static AtomicUsize,
     prev: Option<&'static Self>,
 }
 
