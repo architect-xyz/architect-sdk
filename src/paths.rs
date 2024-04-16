@@ -146,6 +146,12 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
+    pub fn historical_marketdata_api(&self) -> Path {
+        let use_local = true;
+        let base = if use_local { &self.local_base } else { &self.hosted_base };
+        base.append("marketdata").append("historical-api")
+    }
+
     /// RFQ feeds
     pub fn marketdata_rfq(&self, cpty: Cpty) -> Path {
         self.marketdata(cpty, false)

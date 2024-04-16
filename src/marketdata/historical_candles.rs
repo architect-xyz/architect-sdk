@@ -1,16 +1,18 @@
 use super::utils::apply_oneshot;
 use crate::{symbology, Common};
-use anyhow::Result;
-use api::marketdata::{CandleV1, CandleWidth};
+use anyhow::{bail, Result};
+use api::marketdata::{CandleV1, CandleWidth, HistoricalCandlesV1};
 use chrono::{DateTime, Utc};
 use log::debug;
 use netidx::{
     chars::Chars,
     path::Path,
+    publisher::FromValue,
     resolver_client::{Glob, GlobSet},
     subscriber::Event,
 };
 use netidx_archive::recorder_client;
+use netidx_protocols::{call_rpc, rpc::client::Proc};
 
 pub async fn get(
     common: &Common,
@@ -19,6 +21,20 @@ pub async fn get(
     end: DateTime<Utc>,
     width: CandleWidth,
 ) -> Result<Vec<CandleV1>> {
+    let cpty = market.cpty();
+    if !common.paths.use_legacy_hist_marketdata.contains(&cpty.id()) {
+        let path =
+            common.paths.historical_marketdata_api().append("get-historical-candles");
+        let proc = Proc::new(&common.subscriber, path)?;
+        let value = call_rpc!(proc, market: market.name.to_string(), width: width.as_str(), start: start, end: end).await?;
+        match value {
+            netidx::publisher::Value::Error(e) => bail!("{}", e),
+            _ => {
+                let candles = HistoricalCandlesV1::from_value(value)?;
+                return Ok(candles.candles);
+            }
+        }
+    }
     let live_base = common.paths.marketdata_ohlc_by_name(market, true);
     debug!(
         "requesting historical {} candles for {}: from {} to {} via {}",
@@ -28,7 +44,7 @@ pub async fn get(
         end,
         live_base
     );
-    let recorder_base = common.paths.marketdata_hist_ohlc(market.cpty());
+    let recorder_base = common.paths.marketdata_hist_ohlc(cpty);
     let recorder_client =
         recorder_client::Client::new(&common.subscriber, &recorder_base)?;
     get_from_recorder(recorder_client, live_base, start, end, width).await
