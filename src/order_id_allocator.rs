@@ -77,7 +77,7 @@ impl OrderIdAllocator {
         let order_authority = order_authority
             .or_else(|| {
                 info!("no order authority specified; searching for one in config...");
-                common.get_local_component_of_kind("OrderAuthority")
+                common.get_component_of_kind("OrderAuthority")
             })
             .ok_or_else(|| anyhow!("no order authority found"))?;
         let order_authority_path = common.paths.channel(Some(order_authority))?;
