@@ -2,6 +2,8 @@ pub mod account_master;
 pub mod admin_stats;
 pub mod channel_driver;
 pub mod common;
+#[cfg(feature = "db")]
+pub mod db;
 pub mod marketdata;
 pub mod oms;
 pub mod order_id_allocator;
