@@ -3,9 +3,10 @@
 
 use anyhow::{anyhow, bail, Result};
 use api::{
-    utils::messaging::MaybeRequest, Address, ComponentId, Envelope, MaybeSplit, Stamp,
-    TypedMessage, UserId,
+    system_control::SystemControlMessage, utils::messaging::MaybeRequest, Address,
+    ComponentId, Envelope, MaybeSplit, MessageTopic, Stamp, TypedMessage, UserId,
 };
+use enumflags2::BitFlags;
 use futures_util::{select_biased, FutureExt};
 use log::{debug, error};
 use netidx::{path::Path, subscriber::Subscriber};
@@ -190,7 +191,7 @@ impl ChannelDriver {
             conn.send_one(&Envelope {
                 src,
                 dst: Address::Component(dst),
-                stamp: Stamp::default(),
+                stamp: Stamp::new(Default::default()),
                 msg: msg.into(),
             })
         })?
@@ -198,6 +199,23 @@ impl ChannelDriver {
 
     pub fn subscribe(&self) -> broadcast::Receiver<Arc<Vec<Envelope<TypedMessage>>>> {
         self.tx.subscribe()
+    }
+
+    /// Subscribe this channel to the given message topics.
+    /// Set topics to empty to unsubscribe.
+    pub fn subscribe_channel_to_topics(
+        &self,
+        topics: BitFlags<MessageTopic>,
+    ) -> Result<()> {
+        self.with_channel(|conn, src| {
+            if let Address::Channel(uid, chan) = src {
+                conn.send_one(&Envelope::system_control(TypedMessage::SystemControl(
+                    SystemControlMessage::ChannelSubscribe(uid, chan, topics),
+                )))
+            } else {
+                bail!("channel not a user channel")
+            }
+        })?
     }
 
     /// Wait for a message that satisfies predicate `f`.

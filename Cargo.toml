@@ -25,6 +25,7 @@ arc-swap = { workspace = true }
 arcstr = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+enumflags2 = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 fxhash = { workspace = true }
