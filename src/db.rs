@@ -8,6 +8,13 @@ use tokio_postgres_rustls::MakeRustlsConnect;
 use tokio_rustls::rustls::{self, OwnedTrustAnchor};
 use zeroize::Zeroizing;
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub enum PostgresDbFlavor {
+    #[default]
+    Postgres,
+    Timescale,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostgresDbConfig {
     pub pg_user: String,
@@ -15,6 +22,8 @@ pub struct PostgresDbConfig {
     pub pg_host: String,
     pub pg_port: u32,
     pub pg_database: String,
+    #[serde(default)]
+    pub pg_flavor: PostgresDbFlavor,
 }
 
 impl PostgresDbConfig {
@@ -27,6 +36,10 @@ impl PostgresDbConfig {
             "host={} port={} user={} password={} dbname={}",
             self.pg_host, self.pg_port, self.pg_user, *pg_pass, self.pg_database
         ))
+    }
+
+    pub fn is_timescale(&self) -> bool {
+        matches!(self.pg_flavor, PostgresDbFlavor::Timescale)
     }
 }
 
