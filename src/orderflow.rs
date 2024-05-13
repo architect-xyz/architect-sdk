@@ -2,7 +2,9 @@
 //! to a Cpty.  It handles connecting to an OrderflowAuthority, requesting
 //! an order id range, and passing orderflow messages.
 
-use crate::{AtomicOrderIdAllocator, ChannelDriver, Common, OrderIdAllocator};
+use crate::{
+    AtomicOrderIdAllocator, ChannelDriver, Common, OrderIdAllocatorRequestBuilder,
+};
 use anyhow::{anyhow, Result};
 use api::{orderflow::*, ComponentId, TypedMessage};
 use log::info;
@@ -37,13 +39,13 @@ impl OrderflowClient {
             let order_ids_tx = order_ids_tx.clone();
             task::spawn(async move {
                 driver.wait_connected().await?;
-                let order_ids = OrderIdAllocator::get_allocation(
-                    &common,
-                    Some(&driver),
-                    order_authority,
-                    order_id_range,
-                )
-                .await?;
+                let order_ids = OrderIdAllocatorRequestBuilder::new(&common)
+                    .driver(Some(&driver))
+                    .order_authority(order_authority)
+                    .order_id_range(order_id_range)
+                    .build()?
+                    .get_allocation()
+                    .await?;
                 info!("order id range allocated: {:?}", order_ids);
                 order_ids_tx.send(Some(order_ids.into()))?;
                 Ok::<_, anyhow::Error>(())

@@ -92,8 +92,7 @@ impl BookClient {
         Synced(self.tx_updates.subscribe())
     }
 
-    /// Process the specified book event, updating the book with it's
-    /// contents.
+    /// Process the specified book event, updating the book with its contents.
     pub fn process_event(&mut self, ev: Event) -> Result<()> {
         match ev {
             Event::Update(Value::Bytes(mut buf)) => {
