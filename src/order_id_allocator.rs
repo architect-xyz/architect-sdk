@@ -76,7 +76,7 @@ impl<'a> OrderIdAllocatorRequest<'a> {
             })
             .ok_or_else(|| anyhow!("no order authority found"))?;
         let order_authority_path = self.common.paths.channel(Some(order_authority))?;
-        let order_id_range = self.order_id_range.unwrap_or(100);
+        let order_id_range = self.order_id_range.unwrap_or(10);
         let driver = match self.driver {
             Some(driver) => {
                 if *driver.path() != order_authority_path {
