@@ -1,6 +1,7 @@
 //! Core channel driver--wraps the underlying netidx pack_channel with
 //! useful specialized functions.
 
+use crate::Common;
 use anyhow::{anyhow, bail, Result};
 use api::{
     system_control::SystemControlMessage, utils::messaging::MaybeRequest, Address,
@@ -24,6 +25,50 @@ struct Channel {
     src: Address,
 }
 
+pub struct ChannelDriverBuilder<'a> {
+    common: &'a Common,
+    channel_path: Option<Path>,
+    channel_user_id: Option<UserId>,
+    channel_id: Option<u32>,
+}
+
+impl<'a> ChannelDriverBuilder<'a> {
+    pub fn new(common: &'a Common) -> Self {
+        Self { common, channel_path: None, channel_user_id: None, channel_id: None }
+    }
+
+    pub fn with_path(&mut self, path: Path) -> &mut Self {
+        self.channel_path = Some(path);
+        self
+    }
+
+    pub fn with_target(&mut self, target: ComponentId) -> Result<&mut Self> {
+        let path = self.common.paths.channel(Some(target))?;
+        self.channel_path = Some(path);
+        Ok(self)
+    }
+
+    pub fn on_behalf_of(&mut self, user_id: UserId) -> &mut Self {
+        self.channel_user_id = Some(user_id);
+        self
+    }
+
+    pub fn on_channel(&mut self, channel_id: u32) -> &mut Self {
+        self.channel_id = Some(channel_id);
+        self
+    }
+
+    pub fn build(&self) -> ChannelDriver {
+        let default_path = self.common.paths.channel(None).unwrap(); // can't fail
+        ChannelDriver::new(
+            &self.common.subscriber,
+            self.channel_path.clone().unwrap_or(default_path),
+            self.channel_user_id,
+            self.channel_id,
+        )
+    }
+}
+
 pub struct ChannelDriver {
     channel: Arc<RwLock<Option<Channel>>>,
     channel_ready: watch::Receiver<bool>,
@@ -34,9 +79,10 @@ pub struct ChannelDriver {
 }
 
 impl ChannelDriver {
-    pub fn new(
+    fn new(
         subscriber: &Subscriber,
         channel_path: Path,
+        channel_user_id: Option<UserId>, // set to None to connect as self (most common case)
         channel_id: Option<u32>,
     ) -> Self {
         let channel = Arc::new(RwLock::new(None));
@@ -54,6 +100,7 @@ impl ChannelDriver {
                         let res = Self::connect_inner(
                             &subscriber,
                             channel_path.clone(),
+                            channel_user_id,
                             channel_id,
                             channel.clone(),
                             &mut channel_ready_tx,
@@ -87,6 +134,7 @@ impl ChannelDriver {
     async fn connect_inner(
         subscriber: &Subscriber,
         channel_path: Path,
+        channel_user_id: Option<UserId>, // to connect on-behalf-of
         channel_id: Option<u32>,
         channel: Arc<RwLock<Option<Channel>>>,
         channel_ready_tx: &mut watch::Sender<bool>,
@@ -98,7 +146,11 @@ impl ChannelDriver {
             pack_channel::client::Connection::connect(subscriber, channel_path.clone())
                 .await?,
         );
-        debug!("beginning channel handshake, channel_id = {}", channel_id);
+        debug!(
+            "beginning channel handshake, channel_user_id = {:?}, channel_id = {}",
+            channel_user_id, channel_id
+        );
+        conn.send_one(&channel_user_id)?;
         conn.send_one(&channel_id)?;
         let src: Address = conn.recv_one().await?;
         {

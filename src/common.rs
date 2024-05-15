@@ -1,4 +1,4 @@
-use crate::{admin_stats::AdminStats, Paths};
+use crate::{admin_stats::AdminStats, ChannelDriverBuilder, Paths};
 use anyhow::{anyhow, bail, Context, Result};
 use api::{symbology::CptyId, ComponentId, Config};
 use fxhash::{FxHashMap, FxHashSet};
@@ -278,6 +278,10 @@ impl Common {
             write,
         )
         .await
+    }
+
+    pub fn channel_driver(&self) -> ChannelDriverBuilder {
+        ChannelDriverBuilder::new(self)
     }
 }
 

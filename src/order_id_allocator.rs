@@ -47,8 +47,8 @@ pub struct OrderIdAllocatorRequest<'a> {
     driver: Option<&'a ChannelDriver>,
     /// Order authority component--defaults to first one found in common config.
     order_authority: Option<ComponentId>,
-    /// Range of order ids to allocate, defaults to 100.
-    order_id_range: Option<u64>,
+    /// Range of order ids to allocate.
+    order_id_range: u64,
     /// Defaults to the channel driver's user id.
     user_id: Option<UserId>,
 }
@@ -59,7 +59,7 @@ impl<'a> OrderIdAllocatorRequestBuilder<'a> {
             common: Some(common),
             driver: Some(None),
             order_authority: Some(None),
-            order_id_range: Some(None),
+            order_id_range: None,
             user_id: Some(None),
         }
     }
@@ -76,7 +76,7 @@ impl<'a> OrderIdAllocatorRequest<'a> {
             })
             .ok_or_else(|| anyhow!("no order authority found"))?;
         let order_authority_path = self.common.paths.channel(Some(order_authority))?;
-        let order_id_range = self.order_id_range.unwrap_or(10);
+        let order_id_range = self.order_id_range;
         let driver = match self.driver {
             Some(driver) => {
                 if *driver.path() != order_authority_path {
@@ -85,13 +85,14 @@ impl<'a> OrderIdAllocatorRequest<'a> {
                 MaybeOwned::Borrowed(driver)
             }
             None => {
-                let driver = ChannelDriver::new(
-                    &self.common.subscriber,
-                    self.common.paths.channel(Some(order_authority)).unwrap(),
+                let driver = self
+                    .common
+                    .channel_driver()
+                    .with_path(order_authority_path)
                     // CR alee: dumb hack to avoid cross-talk from user drivers,
                     // which are assumed to have a channel_id >= 1
-                    Some(0),
-                );
+                    .on_channel(0)
+                    .build();
                 driver.wait_connected().await?;
                 MaybeOwned::Owned(driver)
             }

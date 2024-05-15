@@ -11,7 +11,7 @@ pub mod orderflow;
 pub mod paths;
 pub mod symbology;
 
-pub use channel_driver::ChannelDriver;
+pub use channel_driver::{ChannelDriver, ChannelDriverBuilder};
 pub use common::Common;
 pub use marketdata::managed_marketdata::ManagedMarketdata;
 pub use order_id_allocator::{

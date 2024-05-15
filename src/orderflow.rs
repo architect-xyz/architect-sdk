@@ -17,7 +17,7 @@ pub struct OrderflowClient {
     order_ids_tx: Arc<watch::Sender<Option<AtomicOrderIdAllocator>>>,
     order_ids_rx: watch::Receiver<Option<AtomicOrderIdAllocator>>,
     order_authority: Option<ComponentId>,
-    default_allocation_range: Option<u64>,
+    default_order_id_allocation: u64,
     target: ComponentId,
 }
 
@@ -31,7 +31,7 @@ impl OrderflowClient {
         common: &Common,
         driver: Arc<ChannelDriver>,
         order_authority: Option<ComponentId>,
-        default_allocation_range: Option<u64>,
+        default_order_id_allocation: u64,
         target: Option<ComponentId>,
     ) -> Result<Self> {
         let (order_ids_tx, order_ids_rx) = watch::channel(None);
@@ -48,7 +48,7 @@ impl OrderflowClient {
             order_ids_tx,
             order_ids_rx,
             order_authority,
-            default_allocation_range,
+            default_order_id_allocation,
             target,
         })
     }
@@ -77,13 +77,13 @@ impl OrderflowClient {
                 break;
             }
             warn!("order ids exhausted; allocating more...");
-            self.allocate_order_ids(self.default_allocation_range).await?;
+            self.allocate_order_ids(self.default_order_id_allocation).await?;
             attempts += 1;
         }
         bail!("unable to allocate order ids")
     }
 
-    pub async fn allocate_order_ids(&self, range: Option<u64>) -> Result<()> {
+    pub async fn allocate_order_ids(&self, range: u64) -> Result<()> {
         Self::do_allocate_order_ids(
             self.common.clone(),
             &self.driver,
@@ -98,7 +98,7 @@ impl OrderflowClient {
         common: Common,
         driver: &ChannelDriver,
         order_authority: Option<ComponentId>,
-        range: Option<u64>,
+        range: u64,
         order_ids_tx: Arc<watch::Sender<Option<AtomicOrderIdAllocator>>>,
     ) -> Result<()> {
         driver.wait_connected().await?;
