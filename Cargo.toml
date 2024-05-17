@@ -23,6 +23,7 @@ anyhow = { workspace = true }
 api = { package = "architect-api", version = "0.3", path = "../api" }
 arc-swap = { workspace = true }
 arcstr = { workspace = true }
+async-stream = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 derive_builder = { workspace = true }
