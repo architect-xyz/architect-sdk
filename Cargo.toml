@@ -10,13 +10,6 @@ license = "AGPL-3.0-only"
 name = "architect-sdk"
 version = "0.3.0"
 
-[features]
-db = [
-    "tokio-postgres-rustls",
-    "tokio-rustls",
-    "webpki-roots"
-]
-
 [dependencies]
 anyhow = { workspace = true }
 api = { package = "architect-api", version = "0.3", path = "../api" }
@@ -58,9 +51,6 @@ smallvec = { workspace = true }
 sysinfo = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
-tokio-postgres-rustls = { workspace = true, optional = true }
-tokio-rustls = { workspace = true, optional = true }
 uuid = { workspace = true }
-webpki-roots = { workspace = true, optional = true }
 zeroize = { workspace = true }
 zstd = { workspace = true }
