@@ -44,7 +44,7 @@ impl PostgresDbConfig {
 }
 
 /// Generates basic tls config, using Mozilla root certs
-pub fn postgres_tls() -> Result<MakeRustlsConnect> {
+pub fn postgres_tls() -> MakeRustlsConnect {
     let root_store = rustls::RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS
             .0
@@ -62,5 +62,5 @@ pub fn postgres_tls() -> Result<MakeRustlsConnect> {
         .with_safe_defaults()
         .with_root_certificates(root_store)
         .with_no_client_auth();
-    Ok(MakeRustlsConnect::new(config))
+    MakeRustlsConnect::new(config)
 }
