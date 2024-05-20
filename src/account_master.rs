@@ -24,7 +24,8 @@ pub async fn get_accounts(
     Ok(accounts)
 }
 
-pub type AccountStream = Pin<Box<dyn Stream<Item = Arc<Vec<Account>>> + Send>>;
+/// Stream of (accounts, is_snapshot)
+pub type AccountStream = Pin<Box<dyn Stream<Item = (Arc<Vec<Account>>, bool)> + Send>>;
 
 pub async fn subscribe_accounts(
     common: &Common,
@@ -44,13 +45,13 @@ pub async fn subscribe_accounts(
         .await?;
     let stream = stream! {
         // CR alee: probably want some way to re-query initial accounts if e.g. the core restarts
-        yield initial_accounts;
+        yield (initial_accounts, true);
         while let Ok(batch) = rx.recv().await {
             for env in batch.iter() {
                 match &env.msg {
                     TypedMessage::AccountMaster(AccountMessage::Accounts(None, accounts)) =>
                     {
-                        yield accounts.clone();
+                        yield (accounts.clone(), false);
                     }
                     _ => {}
                 }

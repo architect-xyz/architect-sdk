@@ -75,6 +75,8 @@ pub struct ChannelDriver {
     channel_path: Path,
     tx: broadcast::Sender<Arc<Vec<Envelope<TypedMessage>>>>,
     _rx: broadcast::Receiver<Arc<Vec<Envelope<TypedMessage>>>>,
+    _tx_reconnected: broadcast::Sender<()>,
+    _rx_reconnected: broadcast::Receiver<()>,
     close: Option<(oneshot::Sender<()>, task::JoinHandle<()>)>,
 }
 
@@ -89,11 +91,13 @@ impl ChannelDriver {
         let (mut channel_ready_tx, channel_ready_rx) = watch::channel(false);
         let (close_tx, mut close_rx) = oneshot::channel();
         let (tx, rx) = broadcast::channel(1000);
+        let (tx_reconnected, rx_reconnected) = broadcast::channel(100);
         let channel_task = {
             let subscriber = subscriber.clone();
             let channel_path = channel_path.clone();
             let channel = channel.clone();
             let tx = tx.clone();
+            let tx_reconnected = tx_reconnected.clone();
             task::spawn({
                 async move {
                     loop {
@@ -106,6 +110,7 @@ impl ChannelDriver {
                             &mut channel_ready_tx,
                             &mut close_rx,
                             tx.clone(),
+                            tx_reconnected.clone(),
                         )
                         .await;
                         channel_ready_tx.send_replace(false);
@@ -127,6 +132,8 @@ impl ChannelDriver {
             channel_path,
             tx,
             _rx: rx,
+            _tx_reconnected: tx_reconnected,
+            _rx_reconnected: rx_reconnected,
             close: Some((close_tx, channel_task)),
         }
     }
@@ -140,6 +147,7 @@ impl ChannelDriver {
         channel_ready_tx: &mut watch::Sender<bool>,
         close_rx: &mut oneshot::Receiver<()>,
         tx: broadcast::Sender<Arc<Vec<Envelope<TypedMessage>>>>,
+        tx_reconnected: broadcast::Sender<()>,
     ) -> Result<()> {
         let channel_id = channel_id.unwrap_or(DEFAULT_CHANNEL_ID);
         let conn = Arc::new(
@@ -161,6 +169,7 @@ impl ChannelDriver {
             }
         }
         channel_ready_tx.send_replace(true);
+        tx_reconnected.send(())?;
         debug!("channel handshake complete, channel = {}", src);
         let mut messages: Vec<Envelope<TypedMessage>> = vec![];
         let mut close_rx = close_rx.fuse();
