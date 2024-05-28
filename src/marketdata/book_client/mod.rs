@@ -110,9 +110,9 @@ impl BookClient {
                     MessageHeader::Snapshot => {
                         let snap: Snapshot = Pack::decode(&mut buf)?;
                         trace!("book snap: {:?}", snap);
+                        self.book.update_from_snapshot(snap);
                         self.synced = 1;
                         self.tx_updates.send_replace(self.synced);
-                        self.book.update_from_snapshot(snap)
                     }
                 }
             }
