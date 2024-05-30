@@ -1,4 +1,4 @@
-pub mod account_master;
+pub mod account_manager;
 pub mod admin_stats;
 pub mod channel_driver;
 pub mod common;
@@ -8,6 +8,7 @@ pub mod order_id_allocator;
 pub mod orderflow;
 pub mod paths;
 pub mod symbology;
+pub mod synced;
 
 pub use channel_driver::{ChannelDriver, ChannelDriverBuilder};
 pub use common::Common;

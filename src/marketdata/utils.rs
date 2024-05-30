@@ -2,29 +2,6 @@ use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use netidx::{resolver_client::GlobSet, subscriber::Event};
 use rust_decimal::Decimal;
-use std::time::Duration;
-use tokio::sync::watch;
-
-pub struct Synced(pub watch::Receiver<u64>);
-
-impl Synced {
-    pub async fn wait_synced(&mut self, timeout: Option<Duration>) -> Result<()> {
-        if let Some(timeout) = timeout {
-            if let Err(_) =
-                tokio::time::timeout(timeout, self.0.wait_for(|v| *v > 0)).await
-            {
-                bail!("timed out waiting for book to sync");
-            }
-        } else {
-            self.0.wait_for(|v| *v > 0).await?;
-        }
-        Ok(())
-    }
-
-    pub async fn changed(&mut self) -> Result<()> {
-        Ok(self.0.changed().await?)
-    }
-}
 
 pub fn decimal_or_error(e: &netidx::subscriber::Event) -> Result<Decimal> {
     use netidx::subscriber::Value;

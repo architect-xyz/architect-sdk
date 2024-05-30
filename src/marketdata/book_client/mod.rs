@@ -1,7 +1,7 @@
 //! Subscribe to book data
 
-use super::utils::Synced;
 use crate::symbology::Market;
+use crate::synced::Synced;
 use anyhow::{anyhow, bail, Result};
 use api::marketdata::{MessageHeader, NetidxFeedPaths, Snapshot, Updates};
 use consolidated_level_book::ConsolidatedLevelBook;
@@ -88,7 +88,7 @@ impl BookClient {
         self.synced != 0
     }
 
-    pub fn subscribe_updates(&self) -> Synced {
+    pub fn subscribe_updates(&self) -> Synced<u64> {
         Synced(self.tx_updates.subscribe())
     }
 
