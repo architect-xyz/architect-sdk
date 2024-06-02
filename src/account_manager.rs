@@ -173,7 +173,8 @@ impl AccountManagerClient {
     }
 
     pub fn get_account(&self, id: &AccountId) -> Option<Account> {
-        self.accounts.load().accounts.get(id).cloned()
+        let t = self.accounts.load();
+        t.accounts.get(id).cloned()
     }
 
     pub fn find_account(&self, id: &AccountId) -> Result<Account> {

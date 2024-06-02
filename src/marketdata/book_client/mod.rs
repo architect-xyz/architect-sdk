@@ -1,7 +1,6 @@
 //! Subscribe to book data
 
-use crate::symbology::Market;
-use crate::synced::Synced;
+use crate::{symbology::Market, synced::Synced};
 use anyhow::{anyhow, bail, Result};
 use api::marketdata::{MessageHeader, NetidxFeedPaths, Snapshot, Updates};
 use consolidated_level_book::ConsolidatedLevelBook;
