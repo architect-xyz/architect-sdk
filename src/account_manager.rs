@@ -24,14 +24,14 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct AccountManagerClient {
-    accounts: Arc<ArcSwap<Accounts>>,
+    state: Arc<ArcSwap<AccountsState>>,
     sync_handle: SyncHandle<bool>,
 }
 
 impl AccountManagerClient {
     pub fn new() -> Self {
         Self {
-            accounts: Arc::new(ArcSwap::from_pointee(Accounts::default())),
+            state: Arc::new(ArcSwap::from_pointee(AccountsState::default())),
             sync_handle: SyncHandle::new(false),
         }
     }
@@ -45,16 +45,12 @@ impl AccountManagerClient {
         debug_print_updates: bool,
     ) -> Self {
         let t = Self::new();
-        let accounts = t.accounts.clone();
+        let state = t.state.clone();
         let sync_handle = t.sync_handle.clone();
         tokio::spawn(async move {
-            if let Err(e) = Self::run_subscription(
-                common,
-                &accounts,
-                &sync_handle,
-                debug_print_updates,
-            )
-            .await
+            if let Err(e) =
+                Self::run_subscription(common, &state, &sync_handle, debug_print_updates)
+                    .await
             {
                 error!("account manager subscription failed: {}", e);
             }
@@ -64,7 +60,7 @@ impl AccountManagerClient {
 
     async fn run_subscription(
         common: Common,
-        accounts: &ArcSwap<Accounts>,
+        state: &ArcSwap<AccountsState>,
         sync_handle: &SyncHandle<bool>,
         debug_print_updates: bool,
     ) -> Result<()> {
@@ -85,7 +81,7 @@ impl AccountManagerClient {
                 get_latest_snapshot.call([] as [(&str, _); 0]).await?.cast_to()?;
             epoch = snap.epoch;
             seq = snap.sequence_number;
-            accounts.store(Arc::new(snap.into()));
+            state.store(Arc::new(snap.into()));
             sync_handle.set(true);
             'batch: while let Some(mut batch) = rx.next().await {
                 'inner: for (_, ev) in batch.drain(..) {
@@ -117,9 +113,9 @@ impl AccountManagerClient {
                                 let new_version = if u.is_snapshot {
                                     u.into()
                                 } else {
-                                    accounts.load().update(&u.into())
+                                    state.load().union(&u.into())
                                 };
-                                accounts.store(Arc::new(new_version));
+                                state.store(Arc::new(new_version));
                             }
                             Ok(None) => {}
                             Err(e) => {
@@ -135,20 +131,23 @@ impl AccountManagerClient {
     }
 
     pub fn update(&self, up: AccountsUpdate) {
-        let new_version = if up.is_snapshot {
-            up.into()
-        } else {
-            self.accounts.load().update(&up.into())
-        };
-        self.accounts.store(Arc::new(new_version));
+        let new_version =
+            if up.is_snapshot { up.into() } else { self.state.load().union(&up.into()) };
+        self.state.store(Arc::new(new_version));
     }
 
     pub fn snapshot(&self, epoch: DateTime<Utc>, sequence_number: u64) -> AccountsUpdate {
-        let snap = self.accounts.load();
+        let snap = self.state.load();
         let mut accounts = vec![];
+        let mut default_permissions = vec![];
         let mut permissions = vec![];
         for (_, a) in &snap.accounts {
             accounts.push(a.clone());
+        }
+        for (user, by_account) in &snap.default_permissions_by_user {
+            for (account, perms) in by_account {
+                default_permissions.push((*user, *account, *perms));
+            }
         }
         for (user, by_account) in &snap.permissions_by_user {
             for (account, perms) in by_account {
@@ -160,6 +159,11 @@ impl AccountManagerClient {
             sequence_number,
             is_snapshot: true,
             accounts: if accounts.is_empty() { None } else { Some(accounts) },
+            default_permissions: if default_permissions.is_empty() {
+                None
+            } else {
+                Some(default_permissions)
+            },
             permissions: if permissions.is_empty() { None } else { Some(permissions) },
         }
     }
@@ -173,7 +177,7 @@ impl AccountManagerClient {
     }
 
     pub fn get_account(&self, id: &AccountId) -> Option<Account> {
-        let t = self.accounts.load();
+        let t = self.state.load();
         t.accounts.get(id).cloned()
     }
 
@@ -181,22 +185,31 @@ impl AccountManagerClient {
         self.get_account(id).ok_or_else(|| anyhow!("no such account: {}", id))
     }
 
-    pub fn get_account_permissions(
+    /// Apply both default and specified permissions to determine
+    /// the final permissions for a (user, account)
+    pub fn resolve_account_permissions(
         &self,
         user: &UserId,
         account: &AccountId,
     ) -> AccountPermissions {
-        self.accounts
-            .load()
+        let state = self.state.load();
+        let default_permissions = state
+            .default_permissions_by_user
+            .get(user)
+            .and_then(|m| m.get(account))
+            .copied()
+            .unwrap_or(AccountPermissions::default());
+        let permissions = state
             .permissions_by_user
             .get(user)
             .and_then(|m| m.get(account))
             .copied()
-            .unwrap_or(AccountPermissions::empty())
+            .unwrap_or(AccountPermissions::default());
+        permissions.with_default(&default_permissions)
     }
 
     pub fn list_accounts(&self, user: Option<&UserId>) -> Vec<AccountId> {
-        let accounts = self.accounts.load();
+        let accounts = self.state.load();
         let mut account_ids = vec![];
         if let Some(user) = user {
             if let Some(by_account) = accounts.permissions_by_user.get(user) {
@@ -214,15 +227,21 @@ impl AccountManagerClient {
 }
 
 #[derive(Debug, Default, Clone)]
-struct Accounts {
+struct AccountsState {
     accounts: Map<AccountId, Account>,
+    default_permissions_by_user: Map<UserId, Map<AccountId, AccountPermissions>>,
     permissions_by_user: Map<UserId, Map<AccountId, AccountPermissions>>,
 }
 
-impl Accounts {
-    fn update(&self, other: &Self) -> Self {
+impl AccountsState {
+    fn union(&self, other: &Self) -> Self {
         Self {
             accounts: self.accounts.union(&other.accounts, |_, _, r| Some(*r)),
+            default_permissions_by_user: self
+                .default_permissions_by_user
+                .union(&other.default_permissions_by_user, |_, l, r| {
+                    Some(l.union(r, |_, _, r| Some(*r)))
+                }),
             permissions_by_user: self
                 .permissions_by_user
                 .union(&other.permissions_by_user, |_, l, r| {
@@ -234,12 +253,19 @@ impl Accounts {
     // CR alee: add prune method to remove empty permissions entries
 }
 
-impl From<AccountsUpdate> for Accounts {
+impl From<AccountsUpdate> for AccountsState {
     fn from(up: AccountsUpdate) -> Self {
         let mut t = Self::default();
         if let Some(accounts) = up.accounts {
             for a in accounts {
                 t.accounts.insert_cow(a.id, a);
+            }
+        }
+        if let Some(default_permissions) = up.default_permissions {
+            for (user, account, perms) in default_permissions {
+                let by_user =
+                    t.default_permissions_by_user.get_or_insert_cow(user, Map::default);
+                by_user.insert_cow(account, perms);
             }
         }
         if let Some(permissions) = up.permissions {
