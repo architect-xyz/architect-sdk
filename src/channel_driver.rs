@@ -249,10 +249,14 @@ impl ChannelDriver {
         M: Into<TypedMessage>,
     {
         self.with_channel(|conn, src| {
+            let user_id = match src {
+                Address::Channel(user_id, _) => Some(user_id),
+                _ => None,
+            };
             conn.send_one(&Envelope {
                 src,
                 dst: Address::Component(dst),
-                stamp: Stamp::new(Default::default()),
+                stamp: Stamp::new(user_id, Default::default()),
                 msg: msg.into(),
             })
         })?

@@ -185,6 +185,20 @@ impl AccountManagerClient {
         self.get_account(id).ok_or_else(|| anyhow!("no such account: {}", id))
     }
 
+    pub fn resolve_accounts(&self, ids: &[AccountId]) -> (Vec<Account>, Vec<AccountId>) {
+        let t = self.state.load();
+        let mut found = vec![];
+        let mut not_found = vec![];
+        for id in ids {
+            if let Some(a) = t.accounts.get(id) {
+                found.push(a.clone());
+            } else {
+                not_found.push(*id);
+            }
+        }
+        (found, not_found)
+    }
+
     /// Apply both default and specified permissions to determine
     /// the final permissions for a (user, account)
     pub fn resolve_account_permissions(
