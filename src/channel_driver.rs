@@ -58,6 +58,11 @@ impl<'a> ChannelDriverBuilder<'a> {
         self
     }
 
+    pub fn channel(&mut self, channel: Option<u32>) -> &mut Self {
+        self.channel_id = channel;
+        self
+    }
+
     pub fn build(&self) -> ChannelDriver {
         let default_path = self.common.paths.channel(None).unwrap(); // can't fail
         ChannelDriver::new(
