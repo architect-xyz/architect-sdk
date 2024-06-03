@@ -266,29 +266,33 @@ impl Txn {
             }
             L::Fiat => ProductKind::Fiat,
             L::Equity => ProductKind::Equity,
-            L::Perpetual { underlying, multiplier, instrument_type } => ProductKind::Perpetual {
-                underlying: match underlying {
-                    None => None,
-                    Some(underlying) => Some(
-                        self.get_product_by_id(&underlying)
-                            .ok_or_else(|| anyhow!("no such underlying"))?,
-                    ),
-                },
-                multiplier,
-                instrument_type,
-            },
-            L::Future { underlying, multiplier, expiration, instrument_type } => ProductKind::Future {
-                underlying: match underlying {
-                    None => None,
-                    Some(underlying) => Some(
-                        self.get_product_by_id(&underlying)
-                            .ok_or_else(|| anyhow!("no such underlying"))?,
-                    ),
-                },
-                multiplier,
-                expiration,
-                instrument_type,
-            },
+            L::Perpetual { underlying, multiplier, instrument_type } => {
+                ProductKind::Perpetual {
+                    underlying: match underlying {
+                        None => None,
+                        Some(underlying) => Some(
+                            self.get_product_by_id(&underlying)
+                                .ok_or_else(|| anyhow!("no such underlying"))?,
+                        ),
+                    },
+                    multiplier,
+                    instrument_type,
+                }
+            }
+            L::Future { underlying, multiplier, expiration, instrument_type } => {
+                ProductKind::Future {
+                    underlying: match underlying {
+                        None => None,
+                        Some(underlying) => Some(
+                            self.get_product_by_id(&underlying)
+                                .ok_or_else(|| anyhow!("no such underlying"))?,
+                        ),
+                    },
+                    multiplier,
+                    expiration,
+                    instrument_type,
+                }
+            }
             L::FutureSpread { same_side_leg, opp_side_leg } => {
                 ProductKind::FutureSpread {
                     same_side_leg: match same_side_leg {
@@ -307,18 +311,20 @@ impl Txn {
                     },
                 }
             }
-            L::Option { underlying, multiplier, expiration, instrument_type } => ProductKind::Option {
-                underlying: match underlying {
-                    None => None,
-                    Some(underlying) => Some(
-                        self.get_product_by_id(&underlying)
-                            .ok_or_else(|| anyhow!("no such underlying"))?,
-                    ),
-                },
-                multiplier,
-                expiration,
-                instrument_type,
-            },
+            L::Option { underlying, multiplier, expiration, instrument_type } => {
+                ProductKind::Option {
+                    underlying: match underlying {
+                        None => None,
+                        Some(underlying) => Some(
+                            self.get_product_by_id(&underlying)
+                                .ok_or_else(|| anyhow!("no such underlying"))?,
+                        ),
+                    },
+                    multiplier,
+                    expiration,
+                    instrument_type,
+                }
+            }
             L::Commodity => ProductKind::Commodity,
             L::Index => ProductKind::Index,
             L::Unknown => ProductKind::Unknown,

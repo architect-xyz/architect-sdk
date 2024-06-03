@@ -85,13 +85,27 @@ impl MarketIndex {
                     i,
                 );
                 match x.base.kind {
-                    ProductKind::Perpetual { underlying, multiplier: _, instrument_type: _ } => {
+                    ProductKind::Perpetual {
+                        underlying,
+                        multiplier: _,
+                        instrument_type: _,
+                    } => {
                         if let Some(underlying) = underlying {
                             insert(&mut self.by_underlying, underlying, i);
                         }
                     }
-                    ProductKind::Future { underlying, multiplier: _, expiration, instrument_type: _ }
-                    | ProductKind::Option { underlying, multiplier: _, expiration, instrument_type: _ } => {
+                    ProductKind::Future {
+                        underlying,
+                        multiplier: _,
+                        expiration,
+                        instrument_type: _,
+                    }
+                    | ProductKind::Option {
+                        underlying,
+                        multiplier: _,
+                        expiration,
+                        instrument_type: _,
+                    } => {
                         if let Some(underlying) = underlying {
                             insert(&mut self.by_underlying, underlying, i);
                         }
@@ -152,13 +166,27 @@ impl MarketIndex {
                     i,
                 );
                 match x.base.kind {
-                    ProductKind::Perpetual { underlying, multiplier: _, instrument_type: _ } => {
+                    ProductKind::Perpetual {
+                        underlying,
+                        multiplier: _,
+                        instrument_type: _,
+                    } => {
                         if let Some(underlying) = underlying {
                             remove(&mut self.by_underlying, underlying, i);
                         }
                     }
-                    ProductKind::Future { underlying, multiplier: _, expiration, instrument_type: _ }
-                    | ProductKind::Option { underlying, multiplier: _, expiration, instrument_type: _ } => {
+                    ProductKind::Future {
+                        underlying,
+                        multiplier: _,
+                        expiration,
+                        instrument_type: _,
+                    }
+                    | ProductKind::Option {
+                        underlying,
+                        multiplier: _,
+                        expiration,
+                        instrument_type: _,
+                    } => {
                         if let Some(underlying) = underlying {
                             remove(&mut self.by_underlying, underlying, i);
                         }

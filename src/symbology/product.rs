@@ -3,7 +3,7 @@ use crate::static_ref;
 use anyhow::{bail, Result};
 use api::{
     symbology::{
-        product::{ProductId, TokenInfo, InstrumentType},
+        product::{InstrumentType, ProductId, TokenInfo},
         Symbolic,
     },
     Str,
@@ -183,9 +183,8 @@ impl ProductKind {
             ProductKind::Future { instrument_type, .. }
             | ProductKind::Perpetual { instrument_type, .. }
             | ProductKind::Option { instrument_type, .. } => *instrument_type,
-            ProductKind::FutureSpread { same_side_leg, .. } => {
-                same_side_leg.map(|p| p.kind.instrument_type().unwrap_or(InstrumentType::Linear))
-            }
+            ProductKind::FutureSpread { same_side_leg, .. } => same_side_leg
+                .map(|p| p.kind.instrument_type().unwrap_or(InstrumentType::Linear)),
             ProductKind::Coin { .. }
             | ProductKind::Fiat
             | ProductKind::Equity
@@ -299,28 +298,34 @@ impl From<&ProductKind> for api::symbology::ProductKind {
                     instrument_type: *instrument_type,
                 }
             }
-            ProductKind::Future { underlying, multiplier, expiration, instrument_type } => {
-                api::symbology::ProductKind::Future {
-                    underlying: underlying.map(|u| u.id),
-                    multiplier: *multiplier,
-                    expiration: *expiration,
-                    instrument_type: *instrument_type,
-                }
-            }
+            ProductKind::Future {
+                underlying,
+                multiplier,
+                expiration,
+                instrument_type,
+            } => api::symbology::ProductKind::Future {
+                underlying: underlying.map(|u| u.id),
+                multiplier: *multiplier,
+                expiration: *expiration,
+                instrument_type: *instrument_type,
+            },
             ProductKind::FutureSpread { same_side_leg, opp_side_leg } => {
                 api::symbology::ProductKind::FutureSpread {
                     same_side_leg: same_side_leg.map(|p| p.id),
                     opp_side_leg: opp_side_leg.map(|p| p.id),
                 }
             }
-            ProductKind::Option { underlying, multiplier, expiration, instrument_type } => {
-                api::symbology::ProductKind::Option {
-                    underlying: underlying.map(|u| u.id),
-                    multiplier: *multiplier,
-                    expiration: *expiration,
-                    instrument_type: *instrument_type,
-                }
-            }
+            ProductKind::Option {
+                underlying,
+                multiplier,
+                expiration,
+                instrument_type,
+            } => api::symbology::ProductKind::Option {
+                underlying: underlying.map(|u| u.id),
+                multiplier: *multiplier,
+                expiration: *expiration,
+                instrument_type: *instrument_type,
+            },
             ProductKind::Index => api::symbology::ProductKind::Index,
             ProductKind::Commodity => api::symbology::ProductKind::Commodity,
             ProductKind::Unknown => api::symbology::ProductKind::Unknown,
