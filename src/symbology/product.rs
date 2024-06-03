@@ -3,7 +3,7 @@ use crate::static_ref;
 use anyhow::{bail, Result};
 use api::{
     symbology::{
-        product::{ProductId, TokenInfo},
+        product::{ProductId, TokenInfo, InstrumentType},
         Symbolic,
     },
     Str,
@@ -80,11 +80,13 @@ pub enum ProductKind {
     Perpetual {
         underlying: Option<Product>,
         multiplier: Option<Decimal>,
+        instrument_type: Option<InstrumentType>,
     },
     Future {
         underlying: Option<Product>,
         multiplier: Option<Decimal>,
         expiration: Option<DateTime<Utc>>,
+        instrument_type: Option<InstrumentType>,
     },
     FutureSpread {
         same_side_leg: Option<Product>,
@@ -94,6 +96,7 @@ pub enum ProductKind {
         underlying: Option<Product>,
         multiplier: Option<Decimal>,
         expiration: Option<DateTime<Utc>>,
+        instrument_type: Option<InstrumentType>,
     },
     Index,
     Commodity,
@@ -175,8 +178,38 @@ impl ProductKind {
         }
     }
 
+    pub fn instrument_type(&self) -> Option<InstrumentType> {
+        let instrument_type = match self {
+            ProductKind::Future { instrument_type, .. }
+            | ProductKind::Perpetual { instrument_type, .. }
+            | ProductKind::Option { instrument_type, .. } => *instrument_type,
+            ProductKind::FutureSpread { same_side_leg, .. } => {
+                same_side_leg.map(|p| p.kind.instrument_type().unwrap_or(InstrumentType::Linear))
+            }
+            ProductKind::Coin { .. }
+            | ProductKind::Fiat
+            | ProductKind::Equity
+            | ProductKind::Index
+            | ProductKind::Commodity
+            | ProductKind::Unknown => None,
+        };
+        instrument_type
+    }
+
     pub fn is_expired(&self, now: &DateTime<Utc>) -> bool {
         self.expiration().is_some_and(|exp| exp.date_naive() < now.date_naive())
+    }
+
+    pub fn is_linear(&self) -> bool {
+        self.instrument_type().is_some_and(|t| t == InstrumentType::Linear)
+    }
+
+    pub fn is_inverse(&self) -> bool {
+        self.instrument_type().is_some_and(|t| t == InstrumentType::Inverse)
+    }
+
+    pub fn is_quanto(&self) -> bool {
+        self.instrument_type().is_some_and(|t| t == InstrumentType::Quanto)
     }
 
     // /// return the option direction, or None if the product isn't an
@@ -259,17 +292,19 @@ impl From<&ProductKind> for api::symbology::ProductKind {
             }
             ProductKind::Fiat => api::symbology::ProductKind::Fiat,
             ProductKind::Equity => api::symbology::ProductKind::Equity,
-            ProductKind::Perpetual { underlying, multiplier } => {
+            ProductKind::Perpetual { underlying, multiplier, instrument_type } => {
                 api::symbology::ProductKind::Perpetual {
                     underlying: underlying.map(|u| u.id),
                     multiplier: *multiplier,
+                    instrument_type: *instrument_type,
                 }
             }
-            ProductKind::Future { underlying, multiplier, expiration } => {
+            ProductKind::Future { underlying, multiplier, expiration, instrument_type } => {
                 api::symbology::ProductKind::Future {
                     underlying: underlying.map(|u| u.id),
                     multiplier: *multiplier,
                     expiration: *expiration,
+                    instrument_type: *instrument_type,
                 }
             }
             ProductKind::FutureSpread { same_side_leg, opp_side_leg } => {
@@ -278,11 +313,12 @@ impl From<&ProductKind> for api::symbology::ProductKind {
                     opp_side_leg: opp_side_leg.map(|p| p.id),
                 }
             }
-            ProductKind::Option { underlying, multiplier, expiration } => {
+            ProductKind::Option { underlying, multiplier, expiration, instrument_type } => {
                 api::symbology::ProductKind::Option {
                     underlying: underlying.map(|u| u.id),
                     multiplier: *multiplier,
                     expiration: *expiration,
+                    instrument_type: *instrument_type,
                 }
             }
             ProductKind::Index => api::symbology::ProductKind::Index,

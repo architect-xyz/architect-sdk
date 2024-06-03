@@ -266,7 +266,7 @@ impl Txn {
             }
             L::Fiat => ProductKind::Fiat,
             L::Equity => ProductKind::Equity,
-            L::Perpetual { underlying, multiplier } => ProductKind::Perpetual {
+            L::Perpetual { underlying, multiplier, instrument_type } => ProductKind::Perpetual {
                 underlying: match underlying {
                     None => None,
                     Some(underlying) => Some(
@@ -275,8 +275,9 @@ impl Txn {
                     ),
                 },
                 multiplier,
+                instrument_type,
             },
-            L::Future { underlying, multiplier, expiration } => ProductKind::Future {
+            L::Future { underlying, multiplier, expiration, instrument_type } => ProductKind::Future {
                 underlying: match underlying {
                     None => None,
                     Some(underlying) => Some(
@@ -286,6 +287,7 @@ impl Txn {
                 },
                 multiplier,
                 expiration,
+                instrument_type,
             },
             L::FutureSpread { same_side_leg, opp_side_leg } => {
                 ProductKind::FutureSpread {
@@ -305,7 +307,7 @@ impl Txn {
                     },
                 }
             }
-            L::Option { underlying, multiplier, expiration } => ProductKind::Option {
+            L::Option { underlying, multiplier, expiration, instrument_type } => ProductKind::Option {
                 underlying: match underlying {
                     None => None,
                     Some(underlying) => Some(
@@ -315,6 +317,7 @@ impl Txn {
                 },
                 multiplier,
                 expiration,
+                instrument_type,
             },
             L::Commodity => ProductKind::Commodity,
             L::Index => ProductKind::Index,
