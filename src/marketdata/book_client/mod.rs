@@ -1,7 +1,6 @@
 //! Subscribe to book data
 
-use super::utils::Synced;
-use crate::symbology::Market;
+use crate::{symbology::Market, synced::Synced};
 use anyhow::{anyhow, bail, Result};
 use api::marketdata::{MessageHeader, NetidxFeedPaths, Snapshot, Updates};
 use consolidated_level_book::ConsolidatedLevelBook;
@@ -88,12 +87,11 @@ impl BookClient {
         self.synced != 0
     }
 
-    pub fn subscribe_updates(&self) -> Synced {
+    pub fn subscribe_updates(&self) -> Synced<u64> {
         Synced(self.tx_updates.subscribe())
     }
 
-    /// Process the specified book event, updating the book with it's
-    /// contents.
+    /// Process the specified book event, updating the book with its contents.
     pub fn process_event(&mut self, ev: Event) -> Result<()> {
         match ev {
             Event::Update(Value::Bytes(mut buf)) => {
@@ -111,9 +109,9 @@ impl BookClient {
                     MessageHeader::Snapshot => {
                         let snap: Snapshot = Pack::decode(&mut buf)?;
                         trace!("book snap: {:?}", snap);
+                        self.book.update_from_snapshot(snap);
                         self.synced = 1;
                         self.tx_updates.send_replace(self.synced);
-                        self.book.update_from_snapshot(snap)
                     }
                 }
             }

@@ -8,6 +8,20 @@ use chrono::{DateTime, Utc};
 use netidx::subscriber::{FromValue, Value};
 use netidx_protocols::{call_rpc, rpc::client::Proc};
 
+pub const USD_EQUIVALENTS: [&'static str; 8] = [
+    "USD",
+    "USDC Crypto",
+    "USDT Crypto",
+    "TUSD Crypto",
+    "PYUSD Crypto",
+    "BUSD Crypto",
+    "USDP Crypto",
+    "FDUSD Crypto",
+];
+
+pub const USD_QUOTE_CURRENCIES: [&'static str; 3] = ["USD", "USDT Crypto", "USDC Crypto"];
+pub const ROUTES: [&'static str; 2] = ["DIRECT", "DATABENTO"];
+
 pub async fn get_market_snapshot(
     common: &Common,
     local: bool,

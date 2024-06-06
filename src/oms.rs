@@ -25,14 +25,14 @@ impl OmsClient {
         common: &Common,
         driver: Arc<ChannelDriver>,
         order_authority: Option<ComponentId>,
-        order_id_range: Option<u64>,
+        default_order_id_allocation: u64,
         target: Option<ComponentId>,
     ) -> Result<Self> {
         let mut orderflow = OrderflowClient::new(
             &common,
             driver,
             order_authority,
-            order_id_range,
+            default_order_id_allocation,
             target,
         )?;
         orderflow.wait_allocated().await?;

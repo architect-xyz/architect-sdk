@@ -8,23 +8,18 @@ homepage = "https://www.architect.xyz"
 keywords = ["crypto", "hft", "trading", "finance"]
 license = "AGPL-3.0-only"
 name = "architect-sdk"
-version = "0.3.0"
-
-[features]
-db = [
-    "tokio-postgres",
-    "tokio-postgres-rustls",
-    "tokio-rustls",
-    "webpki-roots"
-]
+version = "0.4.0"
 
 [dependencies]
 anyhow = { workspace = true }
-api = { package = "architect-api", version = "0.3", path = "../api" }
+api = { package = "architect-api", version = "0.4", path = "../api", features = ["netidx"] }
 arc-swap = { workspace = true }
 arcstr = { workspace = true }
+async-stream = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+derive_builder = { workspace = true }
+enumflags2 = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 fxhash = { workspace = true }
@@ -56,10 +51,6 @@ smallvec = { workspace = true }
 sysinfo = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
-tokio-postgres = { workspace = true, optional = true }
-tokio-postgres-rustls = { workspace = true, optional = true }
-tokio-rustls = { workspace = true, optional = true }
 uuid = { workspace = true }
-webpki-roots = { workspace = true, optional = true }
 zeroize = { workspace = true }
 zstd = { workspace = true }

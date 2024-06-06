@@ -6,8 +6,8 @@
 
 use super::book_client::BookClient;
 use crate::{
-    marketdata::utils::Synced,
     symbology::{Cpty, Market, MarketKind},
+    synced::Synced,
     Common,
 };
 use anyhow::{bail, Result};
@@ -64,7 +64,7 @@ pub struct RfqResponseHandle {
 }
 
 impl RfqResponseHandle {
-    pub fn subscribe_updates(&self) -> Synced {
+    pub fn subscribe_updates(&self) -> Synced<u64> {
         Synced(self.tx_updates.subscribe())
     }
 }
@@ -77,7 +77,7 @@ pub struct DvalHandle {
 }
 
 impl DvalHandle {
-    pub fn subscribe_updates(&self) -> Synced {
+    pub fn subscribe_updates(&self) -> Synced<u64> {
         Synced(self.tx_updates.subscribe())
     }
 }
@@ -190,7 +190,10 @@ impl ManagedMarketdata {
         }
     }
 
-    pub async fn subscribe(&self, market: Market) -> (Arc<Mutex<BookClient>>, Synced) {
+    pub async fn subscribe(
+        &self,
+        market: Market,
+    ) -> (Arc<Mutex<BookClient>>, Synced<u64>) {
         let mut book_handles = self.book_handles.lock().await;
         if let Some(existing) =
             book_handles.by_market.get(&market).and_then(|w| w.upgrade())
@@ -218,7 +221,7 @@ impl ManagedMarketdata {
         &self,
         market: Market,
         path_leaf: String,
-    ) -> Result<(Arc<Mutex<DvalHandle>>, Synced)> {
+    ) -> Result<(Arc<Mutex<DvalHandle>>, Synced<u64>)> {
         let path =
             self.common.paths.marketdata_rt_by_name(market).append(path_leaf.as_str());
         let (handle, synced) = {
@@ -259,7 +262,7 @@ impl ManagedMarketdata {
         &self,
         market: Market,
         qty: Decimal,
-    ) -> Result<(Arc<Mutex<RfqResponseHandle>>, Synced)> {
+    ) -> Result<(Arc<Mutex<RfqResponseHandle>>, Synced<u64>)> {
         let cpty = Cpty { venue: market.venue, route: market.route };
         let (base, quote) = match market.kind {
             MarketKind::Exchange(k) => (k.base, k.quote),
