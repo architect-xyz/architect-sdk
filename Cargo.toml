@@ -12,7 +12,7 @@ version = "0.3.0"
 
 [dependencies]
 anyhow = { workspace = true }
-api = { package = "architect-api", version = "0.3", path = "../api" }
+api = { package = "architect-api", version = "0.3", path = "../api", features = ["netidx"] }
 arc-swap = { workspace = true }
 arcstr = { workspace = true }
 async-stream = { workspace = true }
