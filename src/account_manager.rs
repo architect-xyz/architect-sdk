@@ -228,7 +228,17 @@ impl AccountManagerClient {
         if let Some(user) = user {
             if let Some(by_account) = accounts.permissions_by_user.get(user) {
                 for (id, _) in by_account {
-                    account_ids.push(*id);
+                    if self.resolve_account_permissions(user, id).list() {
+                        account_ids.push(*id);
+                    }
+                }
+            } else if let Some(by_account) =
+                accounts.default_permissions_by_user.get(user)
+            {
+                for (id, _) in by_account {
+                    if self.resolve_account_permissions(user, id).list() {
+                        account_ids.push(*id);
+                    }
                 }
             }
         } else {
