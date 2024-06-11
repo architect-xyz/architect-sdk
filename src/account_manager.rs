@@ -95,6 +95,7 @@ impl AccountManagerClient {
                                 if debug_print_updates {
                                     println!("update: {:?}", u);
                                 }
+                                debug!("accounts update: {:?}", u);
                                 if u.epoch != epoch {
                                     info!("epoch advance: {} -> {}", epoch, u.epoch);
                                     break 'batch;
