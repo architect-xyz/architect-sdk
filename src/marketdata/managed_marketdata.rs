@@ -15,7 +15,7 @@ use api::marketdata::{RfqRequest, RfqResponse};
 use futures::channel::mpsc;
 use futures_util::StreamExt;
 use fxhash::FxHashMap;
-use log::{error, warn};
+use log::{debug, error, warn};
 use netidx::{
     pool::Pooled,
     subscriber::{Dval, Event, SubId, UpdatesFlags, Value},
@@ -202,6 +202,7 @@ impl ManagedMarketdata {
             return (existing, synced);
         }
         let book_path = self.common.paths.marketdata_rt_by_name(market).append("book");
+        debug!("subscribing to book at {}", book_path);
         let book_client = BookClient::new(
             &self.common.subscriber,
             &book_path,
