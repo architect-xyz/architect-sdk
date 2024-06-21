@@ -6,7 +6,7 @@
 
 use super::book_client::BookClient;
 use crate::{
-    symbology::{Cpty, Market, MarketKind},
+    symbology::{Cpty, MarketRef, MarketKind},
     synced::Synced,
     Common,
 };
@@ -42,7 +42,7 @@ pub struct ManagedMarketdata {
 
 // CR alee: periodically garbage collect weaks that have been dropped
 pub struct BookHandles {
-    by_market: FxHashMap<Market, Weak<Mutex<BookClient>>>,
+    by_market: FxHashMap<MarketRef, Weak<Mutex<BookClient>>>,
     by_sub_id: FxHashMap<SubId, Weak<Mutex<BookClient>>>,
 }
 
@@ -52,7 +52,7 @@ pub struct RfqHandles {
 }
 
 pub struct DvalHandles {
-    by_market_and_path_leaf: FxHashMap<(Market, String), Weak<Mutex<DvalHandle>>>,
+    by_market_and_path_leaf: FxHashMap<(MarketRef, String), Weak<Mutex<DvalHandle>>>,
     by_sub_id: FxHashMap<SubId, Weak<Mutex<DvalHandle>>>,
 }
 
@@ -192,7 +192,7 @@ impl ManagedMarketdata {
 
     pub async fn subscribe(
         &self,
-        market: Market,
+        market: MarketRef,
     ) -> (Arc<Mutex<BookClient>>, Synced<u64>) {
         let mut book_handles = self.book_handles.lock().await;
         if let Some(existing) =
@@ -220,7 +220,7 @@ impl ManagedMarketdata {
 
     pub async fn subscribe_path(
         &self,
-        market: Market,
+        market: MarketRef,
         path_leaf: String,
     ) -> Result<(Arc<Mutex<DvalHandle>>, Synced<u64>)> {
         let path =
@@ -261,7 +261,7 @@ impl ManagedMarketdata {
 
     pub async fn subscribe_rfq(
         &self,
-        market: Market,
+        market: MarketRef,
         qty: Decimal,
     ) -> Result<(Arc<Mutex<RfqResponseHandle>>, Synced<u64>)> {
         let cpty = Cpty { venue: market.venue, route: market.route };

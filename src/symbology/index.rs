@@ -1,6 +1,6 @@
 use super::{
-    allocator::AllocatorSnapshot, market::MarketInner, static_ref::StaticRef, Market,
-    MarketKind, Product, ProductKind, Route, Venue,
+    allocator::AllocatorSnapshot, market::MarketInner, static_ref::StaticRef, MarketKind,
+    MarketRef, ProductKind, ProductRef, RouteRef, VenueRef,
 };
 use anyhow::{bail, Result};
 use api::{
@@ -19,21 +19,21 @@ pub type Set<T> = set::Set<T, 16>;
 /// This a queryable index of all markets
 #[derive(Debug, Clone)]
 pub struct MarketIndex {
-    all: Set<Market>,
-    by_base: Map<Product, Set<Market>>,
-    by_base_kind: Map<Str, Set<Market>>,
-    by_pool_has: Map<Product, Set<Market>>,
-    by_quote: Map<Product, Set<Market>>,
-    by_venue: Map<Venue, Set<Market>>,
-    by_route: Map<Route, Set<Market>>,
-    by_exchange_symbol: Map<Str, Set<Market>>,
-    by_underlying: Map<Product, Set<Market>>,
-    by_expiration: Map<DateTime<Utc>, Set<Market>>,
+    all: Set<MarketRef>,
+    by_base: Map<ProductRef, Set<MarketRef>>,
+    by_base_kind: Map<Str, Set<MarketRef>>,
+    by_pool_has: Map<ProductRef, Set<MarketRef>>,
+    by_quote: Map<ProductRef, Set<MarketRef>>,
+    by_venue: Map<VenueRef, Set<MarketRef>>,
+    by_route: Map<RouteRef, Set<MarketRef>>,
+    by_exchange_symbol: Map<Str, Set<MarketRef>>,
+    by_underlying: Map<ProductRef, Set<MarketRef>>,
+    by_expiration: Map<DateTime<Utc>, Set<MarketRef>>,
     snap: Option<AllocatorSnapshot<MarketInner>>,
 }
 
-impl FromIterator<Market> for MarketIndex {
-    fn from_iter<T: IntoIterator<Item = Market>>(iter: T) -> Self {
+impl FromIterator<MarketRef> for MarketIndex {
+    fn from_iter<T: IntoIterator<Item = MarketRef>>(iter: T) -> Self {
         let mut t = Self::new();
         for p in iter {
             t.insert(p)
@@ -61,11 +61,11 @@ impl MarketIndex {
     }
 
     /// insert a market into the index
-    pub fn insert(&mut self, i: Market) {
+    pub fn insert(&mut self, i: MarketRef) {
         fn insert<K: Ord + Clone + Copy + 'static>(
-            m: &mut Map<K, Set<Market>>,
+            m: &mut Map<K, Set<MarketRef>>,
             k: K,
-            i: Market,
+            i: MarketRef,
         ) {
             let mut set = m.remove_cow(&k).unwrap_or(Set::new());
             set.insert_cow(i);
@@ -139,11 +139,11 @@ impl MarketIndex {
     }
 
     /// remove a tradable product from the index
-    pub fn remove(&mut self, i: Market) {
+    pub fn remove(&mut self, i: MarketRef) {
         fn remove<K: Ord + Clone + Copy + 'static>(
-            m: &mut Map<K, Set<Market>>,
+            m: &mut Map<K, Set<MarketRef>>,
             k: K,
-            i: Market,
+            i: MarketRef,
         ) {
             if let Some(mut set) = m.remove_cow(&k) {
                 set.remove_cow(&i);
@@ -219,7 +219,7 @@ impl MarketIndex {
         }
     }
 
-    fn query_(&self, q: &Query) -> Set<Market> {
+    fn query_(&self, q: &Query) -> Set<MarketRef> {
         fn start_of_day(dt: DateTime<Utc>) -> DateTime<Utc> {
             let date = dt.naive_utc().date();
             let ndt = NaiveDateTime::new(date, NaiveTime::from_hms_opt(0, 0, 0).unwrap());
@@ -251,34 +251,39 @@ impl MarketIndex {
                     .map(|t| *t)
                     .collect()
             }
-            Query::Base(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
-                self.by_base.get(&p).cloned().unwrap_or_else(Set::new)
-            }),
+            Query::Base(s) => ProductRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |p| {
+                    self.by_base.get(&p).cloned().unwrap_or_else(Set::new)
+                }),
             Query::BaseKind(s) => {
                 self.by_base_kind.get(s).cloned().unwrap_or_else(Set::new)
             }
-            Query::Quote(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
-                self.by_quote.get(&p).cloned().unwrap_or_else(Set::new)
-            }),
-            Query::Pool(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
-                self.by_pool_has.get(&p).cloned().unwrap_or_else(Set::new)
-            }),
-            Query::Route(s) => Route::get_by_name_or_id(s).map_or_else(Set::new, |r| {
-                self.by_route.get(&r).cloned().unwrap_or_else(Set::new)
-            }),
-            Query::Venue(s) => Venue::get_by_name_or_id(s).map_or_else(Set::new, |v| {
-                self.by_venue.get(&v).cloned().unwrap_or_else(Set::new)
-            }),
+            Query::Quote(s) => ProductRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |p| {
+                    self.by_quote.get(&p).cloned().unwrap_or_else(Set::new)
+                }),
+            Query::Pool(s) => ProductRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |p| {
+                    self.by_pool_has.get(&p).cloned().unwrap_or_else(Set::new)
+                }),
+            Query::Route(s) => RouteRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |r| {
+                    self.by_route.get(&r).cloned().unwrap_or_else(Set::new)
+                }),
+            Query::Venue(s) => VenueRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |v| {
+                    self.by_venue.get(&v).cloned().unwrap_or_else(Set::new)
+                }),
             Query::ExchangeSymbol(s) => {
                 self.by_exchange_symbol.get(s).cloned().unwrap_or_else(Set::new)
             }
-            Query::Underlying(s) => Product::get_by_name_or_id(s)
+            Query::Underlying(s) => ProductRef::get_by_name_or_id(s)
                 .map_or_else(Set::new, |p| {
                     self.by_underlying.get(&p).cloned().unwrap_or_else(Set::new)
                 }),
             Query::Expired => {
                 let now = Utc::now();
-                let res: Set<Market> = self
+                let res: Set<MarketRef> = self
                     .all
                     .into_iter()
                     .filter(|t| {
@@ -340,33 +345,33 @@ impl MarketIndex {
     /// was last updated. If none were added this is very quick. If the index
     /// has never been updated this will index all tradable products
     pub fn update(&mut self) {
-        let snap = Market::allocator_snapshot(self.snap, |p| self.insert(p));
+        let snap = MarketRef::allocator_snapshot(self.snap, |p| self.insert(p));
         self.snap = Some(snap);
     }
 
     /// Query the index, returning the set of all tradable products
     /// that match the query.
-    pub fn query(&self, q: &Query) -> Set<Market> {
+    pub fn query(&self, q: &Query) -> Set<MarketRef> {
         self.query_(q)
     }
 
     /// This is the same as calling update followed by query
-    pub fn update_and_query(&mut self, q: &Query) -> Set<Market> {
+    pub fn update_and_query(&mut self, q: &Query) -> Set<MarketRef> {
         self.update();
         self.query(q)
     }
 
     /// Return all markets in the index
-    pub fn all(&self) -> Set<Market> {
+    pub fn all(&self) -> Set<MarketRef> {
         self.all.clone()
     }
 
     pub fn find_exactly_one_by_exchange_symbol<S: AsRef<str> + Ord>(
         &self,
-        venue: Venue,
-        route: Route,
+        venue: VenueRef,
+        route: RouteRef,
         exchange_symbol: S,
-    ) -> Result<Market> {
+    ) -> Result<MarketRef> {
         let res = self
             .by_exchange_symbol
             .get(exchange_symbol.as_ref())
@@ -395,11 +400,11 @@ impl MarketIndex {
 
     pub fn find_exactly_one_by_base_and_quote(
         &self,
-        venue: Venue,
-        route: Route,
-        base: Product,
-        quote: Product,
-    ) -> Result<Market> {
+        venue: VenueRef,
+        route: RouteRef,
+        base: ProductRef,
+        quote: ProductRef,
+    ) -> Result<MarketRef> {
         let res = self.by_base.get(&base).cloned().unwrap_or_else(Set::new);
         let mut iter = res.into_iter().filter(|m| {
             m.venue == venue

@@ -22,14 +22,14 @@ static TXN_LOCK: Mutex<()> = Mutex::new(());
 /// products or tradable products that exist in the global symbology
 /// will not undo those changes.
 pub struct Txn {
-    venue_by_name: Arc<Map<Str, Venue>>,
-    venue_by_id: Arc<Map<VenueId, Venue>>,
-    route_by_name: Arc<Map<Str, Route>>,
-    route_by_id: Arc<Map<RouteId, Route>>,
-    product_by_name: Arc<Map<Str, Product>>,
-    product_by_id: Arc<Map<ProductId, Product>>,
-    market_by_name: Arc<Map<Str, Market>>,
-    market_by_id: Arc<Map<MarketId, Market>>,
+    venue_by_name: Arc<Map<Str, VenueRef>>,
+    venue_by_id: Arc<Map<VenueId, VenueRef>>,
+    route_by_name: Arc<Map<Str, RouteRef>>,
+    route_by_id: Arc<Map<RouteId, RouteRef>>,
+    product_by_name: Arc<Map<Str, ProductRef>>,
+    product_by_id: Arc<Map<ProductId, ProductRef>>,
+    market_by_name: Arc<Map<Str, MarketRef>>,
+    market_by_id: Arc<Map<MarketId, MarketRef>>,
 }
 
 impl Drop for Txn {
@@ -53,14 +53,14 @@ impl Txn {
             market_by_name,
             market_by_id,
         } = &self;
-        VENUE_BY_NAME.store(Arc::clone(venue_by_name));
-        VENUE_BY_ID.store(Arc::clone(venue_by_id));
-        ROUTE_BY_NAME.store(Arc::clone(route_by_name));
-        ROUTE_BY_ID.store(Arc::clone(route_by_id));
-        PRODUCT_BY_NAME.store(Arc::clone(product_by_name));
-        PRODUCT_BY_ID.store(Arc::clone(product_by_id));
-        MARKET_BY_NAME.store(Arc::clone(market_by_name));
-        MARKET_BY_ID.store(Arc::clone(market_by_id));
+        VENUE_REF_BY_NAME.store(Arc::clone(venue_by_name));
+        VENUE_REF_BY_ID.store(Arc::clone(venue_by_id));
+        ROUTE_REF_BY_NAME.store(Arc::clone(route_by_name));
+        ROUTE_REF_BY_ID.store(Arc::clone(route_by_id));
+        PRODUCT_REF_BY_NAME.store(Arc::clone(product_by_name));
+        PRODUCT_REF_BY_ID.store(Arc::clone(product_by_id));
+        MARKET_REF_BY_NAME.store(Arc::clone(market_by_name));
+        MARKET_REF_BY_ID.store(Arc::clone(market_by_id));
     }
 
     /// Add the symbology in the transaction to the global symbology,
@@ -78,29 +78,29 @@ impl Txn {
             market_by_name,
             market_by_id,
         } = &self;
-        VENUE_BY_NAME.store(Arc::new(
-            (**VENUE_BY_NAME.load()).union(venue_by_name, |_, _, v| Some(*v)),
+        VENUE_REF_BY_NAME.store(Arc::new(
+            (**VENUE_REF_BY_NAME.load()).union(venue_by_name, |_, _, v| Some(*v)),
         ));
-        VENUE_BY_ID.store(Arc::new(
-            (**VENUE_BY_ID.load()).union(venue_by_id, |_, _, v| Some(*v)),
+        VENUE_REF_BY_ID.store(Arc::new(
+            (**VENUE_REF_BY_ID.load()).union(venue_by_id, |_, _, v| Some(*v)),
         ));
-        ROUTE_BY_NAME.store(Arc::new(
-            (**ROUTE_BY_NAME.load()).union(route_by_name, |_, _, v| Some(*v)),
+        ROUTE_REF_BY_NAME.store(Arc::new(
+            (**ROUTE_REF_BY_NAME.load()).union(route_by_name, |_, _, v| Some(*v)),
         ));
-        ROUTE_BY_ID.store(Arc::new(
-            (**ROUTE_BY_ID.load()).union(route_by_id, |_, _, v| Some(*v)),
+        ROUTE_REF_BY_ID.store(Arc::new(
+            (**ROUTE_REF_BY_ID.load()).union(route_by_id, |_, _, v| Some(*v)),
         ));
-        PRODUCT_BY_NAME.store(Arc::new(
-            (**PRODUCT_BY_NAME.load()).union(product_by_name, |_, _, v| Some(*v)),
+        PRODUCT_REF_BY_NAME.store(Arc::new(
+            (**PRODUCT_REF_BY_NAME.load()).union(product_by_name, |_, _, v| Some(*v)),
         ));
-        PRODUCT_BY_ID.store(Arc::new(
-            (**PRODUCT_BY_ID.load()).union(product_by_id, |_, _, v| Some(*v)),
+        PRODUCT_REF_BY_ID.store(Arc::new(
+            (**PRODUCT_REF_BY_ID.load()).union(product_by_id, |_, _, v| Some(*v)),
         ));
-        MARKET_BY_NAME.store(Arc::new(
-            (**MARKET_BY_NAME.load()).union(market_by_name, |_, _, v| Some(*v)),
+        MARKET_REF_BY_NAME.store(Arc::new(
+            (**MARKET_REF_BY_NAME.load()).union(market_by_name, |_, _, v| Some(*v)),
         ));
-        MARKET_BY_ID.store(Arc::new(
-            (**MARKET_BY_ID.load()).union(market_by_id, |_, _, v| Some(*v)),
+        MARKET_REF_BY_ID.store(Arc::new(
+            (**MARKET_REF_BY_ID.load()).union(market_by_id, |_, _, v| Some(*v)),
         ));
     }
 
@@ -108,14 +108,14 @@ impl Txn {
         MutexGuard::leak(lock);
         // we must do this so the Txn remains Send and Sync
         Self {
-            venue_by_name: VENUE_BY_NAME.load_full(),
-            venue_by_id: VENUE_BY_ID.load_full(),
-            route_by_name: ROUTE_BY_NAME.load_full(),
-            route_by_id: ROUTE_BY_ID.load_full(),
-            product_by_name: PRODUCT_BY_NAME.load_full(),
-            product_by_id: PRODUCT_BY_ID.load_full(),
-            market_by_name: MARKET_BY_NAME.load_full(),
-            market_by_id: MARKET_BY_ID.load_full(),
+            venue_by_name: VENUE_REF_BY_NAME.load_full(),
+            venue_by_id: VENUE_REF_BY_ID.load_full(),
+            route_by_name: ROUTE_REF_BY_NAME.load_full(),
+            route_by_id: ROUTE_REF_BY_ID.load_full(),
+            product_by_name: PRODUCT_REF_BY_NAME.load_full(),
+            product_by_id: PRODUCT_REF_BY_ID.load_full(),
+            market_by_name: MARKET_REF_BY_NAME.load_full(),
+            market_by_id: MARKET_REF_BY_ID.load_full(),
         }
     }
 
@@ -162,16 +162,16 @@ impl Txn {
         TXN_LOCK.try_lock().map(Self::empty_inner)
     }
 
-    pub fn get_route_by_id(&self, id: &RouteId) -> Option<Route> {
+    pub fn get_route_by_id(&self, id: &RouteId) -> Option<RouteRef> {
         self.route_by_id.get(id).copied()
     }
 
-    pub fn find_route_by_id(&self, id: &RouteId) -> Result<Route> {
+    pub fn find_route_by_id(&self, id: &RouteId) -> Result<RouteRef> {
         self.get_route_by_id(id).ok_or_else(|| anyhow!("no such route"))
     }
 
-    pub fn add_route(&mut self, route: api::symbology::Route) -> Result<Route> {
-        Route::insert(
+    pub fn add_route(&mut self, route: api::symbology::Route) -> Result<RouteRef> {
+        RouteRef::insert(
             Arc::make_mut(&mut self.route_by_name),
             Arc::make_mut(&mut self.route_by_id),
             route,
@@ -191,16 +191,16 @@ impl Txn {
         ))
     }
 
-    pub fn get_venue_by_id(&self, id: &VenueId) -> Option<Venue> {
+    pub fn get_venue_by_id(&self, id: &VenueId) -> Option<VenueRef> {
         self.venue_by_id.get(id).copied()
     }
 
-    pub fn find_venue_by_id(&self, id: &VenueId) -> Result<Venue> {
+    pub fn find_venue_by_id(&self, id: &VenueId) -> Result<VenueRef> {
         self.get_venue_by_id(id).ok_or_else(|| anyhow!("no such venue"))
     }
 
-    pub fn add_venue(&mut self, venue: api::symbology::Venue) -> Result<Venue> {
-        Venue::insert(
+    pub fn add_venue(&mut self, venue: api::symbology::Venue) -> Result<VenueRef> {
+        VenueRef::insert(
             Arc::make_mut(&mut self.venue_by_name),
             Arc::make_mut(&mut self.venue_by_id),
             venue,
@@ -220,15 +220,18 @@ impl Txn {
         ))
     }
 
-    fn get_product_by_id(&self, id: &ProductId) -> Option<Product> {
+    fn get_product_by_id(&self, id: &ProductId) -> Option<ProductRef> {
         self.product_by_id.get(id).copied()
     }
 
-    pub fn add_product(&mut self, product: api::symbology::Product) -> Result<Product> {
+    pub fn add_product(
+        &mut self,
+        product: api::symbology::Product,
+    ) -> Result<ProductRef> {
         // manually construct the inner ref type, because we are inside a transaction
         // and the TryFrom impl might not know all the refs yet
         let inner = self.resolve_product_inner(product)?;
-        Product::insert(
+        ProductRef::insert(
             Arc::make_mut(&mut self.product_by_name),
             Arc::make_mut(&mut self.product_by_id),
             inner,
@@ -343,11 +346,11 @@ impl Txn {
         ))
     }
 
-    pub fn add_market(&mut self, market: api::symbology::Market) -> Result<Market> {
+    pub fn add_market(&mut self, market: api::symbology::Market) -> Result<MarketRef> {
         // manually construct the inner ref type, because we are inside a transaction
         // and the TryFrom impl might not know all the refs yet
         let inner = self.resolve_market_inner(market)?;
-        Market::insert(
+        MarketRef::insert(
             Arc::make_mut(&mut self.market_by_name),
             Arc::make_mut(&mut self.market_by_id),
             inner,
@@ -501,9 +504,9 @@ impl Txn {
 
     fn dump_product(
         &self,
-        pset: &mut FxHashSet<Product>,
+        pset: &mut FxHashSet<ProductRef>,
         updates: &mut Vec<SymbologyUpdateKind>,
-        product: &Product,
+        product: &ProductRef,
     ) {
         product.kind.iter_dependents(|p| {
             if !pset.contains(p) {
@@ -518,7 +521,7 @@ impl Txn {
 
     /// dump the current symbology as of Txn to a series of symbology updates
     pub fn dump(&self) -> Pooled<Vec<SymbologyUpdateKind>> {
-        pool!(pool_pset, FxHashSet<Product>, 2, 1_000_000);
+        pool!(pool_pset, FxHashSet<ProductRef>, 2, 1_000_000);
         pool!(pool_update, Vec<SymbologyUpdateKind>, 2, 1_000_000);
         let mut pset = pool_pset().take();
         let mut updates = pool_update().take();

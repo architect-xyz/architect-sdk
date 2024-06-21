@@ -1,5 +1,6 @@
 use super::{
-    allocator::StaticBumpAllocator, static_ref::StaticRef, Cpty, Product, Route, Venue,
+    allocator::StaticBumpAllocator, static_ref::StaticRef, Cpty, ProductRef, RouteRef,
+    VenueRef,
 };
 use crate::static_ref;
 use anyhow::{bail, Result};
@@ -19,15 +20,15 @@ use parking_lot::Mutex;
 use smallvec::SmallVec;
 use std::sync::{atomic::AtomicUsize, Arc};
 
-static_ref!(Market, MarketInner, 512);
+static_ref!(MarketRef, MarketInner, 512);
 
-impl Market {
+impl MarketRef {
     /// Forward the new impl of the inner type as a convenience
     pub fn exchange(
-        base: Product,
-        quote: Product,
-        venue: Venue,
-        route: Route,
+        base: ProductRef,
+        quote: ProductRef,
+        venue: VenueRef,
+        route: RouteRef,
         exchange_symbol: &str,
         extra_info: api::symbology::MarketInfo,
     ) -> Result<api::symbology::Market> {
@@ -43,9 +44,9 @@ impl Market {
 
     /// Forward the new impl of the inner type as a convenience
     pub fn pool(
-        products: impl Iterator<Item = Product>,
-        venue: Venue,
-        route: Route,
+        products: impl Iterator<Item = ProductRef>,
+        venue: VenueRef,
+        route: RouteRef,
         exchange_symbol: &str,
         extra_info: api::symbology::MarketInfo,
     ) -> Result<api::symbology::Market> {
@@ -62,7 +63,7 @@ impl Market {
         Cpty { venue: self.venue, route: self.route }
     }
 
-    pub fn base(&self) -> Option<Product> {
+    pub fn base(&self) -> Option<ProductRef> {
         if let MarketKind::Exchange(ExchangeMarketKind { base, .. }) = &self.kind {
             Some(*base)
         } else {
@@ -71,7 +72,7 @@ impl Market {
     }
 }
 
-impl NetidxFeedPaths for Market {
+impl NetidxFeedPaths for MarketRef {
     fn path_by_id(&self, base: &Path) -> Path {
         base.append("by-id").append(&self.id.to_string())
     }
@@ -104,8 +105,8 @@ pub struct MarketInner {
     pub id: MarketId,
     pub name: Str,
     pub kind: MarketKind,
-    pub venue: Venue,
-    pub route: Route,
+    pub venue: VenueRef,
+    pub route: RouteRef,
     pub exchange_symbol: Str,
     pub extra_info: MarketInfo,
 }
@@ -161,8 +162,8 @@ impl From<MarketKind> for api::symbology::MarketKind {
 /// Derivation of `api::symbology::ExchangeMarketKind` where ids are replaced with StaticRef's.
 #[derive(Debug, Clone, Copy)]
 pub struct ExchangeMarketKind {
-    pub base: Product,
-    pub quote: Product,
+    pub base: ProductRef,
+    pub quote: ProductRef,
 }
 
 impl From<ExchangeMarketKind> for api::symbology::market::ExchangeMarketKind {
@@ -177,7 +178,7 @@ impl From<ExchangeMarketKind> for api::symbology::market::ExchangeMarketKind {
 /// Derivation of `api::symbology::PoolMarketKind` where ids are replaced with StaticRef's.
 #[derive(Debug, Clone)]
 pub struct PoolMarketKind {
-    pub products: SmallVec<[Product; 2]>,
+    pub products: SmallVec<[ProductRef; 2]>,
 }
 
 impl From<PoolMarketKind> for api::symbology::market::PoolMarketKind {
@@ -191,20 +192,24 @@ impl From<PoolMarketKind> for api::symbology::market::PoolMarketKind {
 /// E.g. CQG markets should actually display using Databento marketdata instead of
 /// CQG marketdata;  this functions gives the preferred display market for a given
 /// trading market.
-pub fn preferred_marketdata_market(trading_market: Market) -> anyhow::Result<Market> {
+pub fn preferred_marketdata_market(
+    trading_market: MarketRef,
+) -> anyhow::Result<MarketRef> {
     if trading_market.route.name.as_str() == "CQG" {
         let trading_name = trading_market.name.as_str();
         let data_name = trading_name.replace("CQG", "DATABENTO");
-        return Market::find_by_name_or_id(&data_name);
+        return MarketRef::find_by_name_or_id(&data_name);
     }
     Ok(trading_market)
 }
 
-pub fn preferred_trading_market(marketdata_market: Market) -> anyhow::Result<Market> {
+pub fn preferred_trading_market(
+    marketdata_market: MarketRef,
+) -> anyhow::Result<MarketRef> {
     if marketdata_market.venue.name.as_str() == "CME" {
         let display_name = marketdata_market.name.as_str();
         let trading_name = display_name.replace("DATABENTO", "CQG");
-        return Market::find_by_name_or_id(&trading_name);
+        return MarketRef::find_by_name_or_id(&trading_name);
     }
     Ok(marketdata_market)
 }

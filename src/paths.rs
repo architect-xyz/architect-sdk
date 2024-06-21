@@ -1,4 +1,4 @@
-use crate::symbology::{market::ExchangeMarketKind, Cpty, Market, MarketKind};
+use crate::symbology::{market::ExchangeMarketKind, Cpty, MarketRef, MarketKind};
 use anyhow::{anyhow, bail, Result};
 use api::{marketdata::NetidxFeedPaths, symbology::CptyId, ComponentId};
 use fxhash::{FxHashMap, FxHashSet};
@@ -50,7 +50,7 @@ impl Paths {
     }
 
     /// Realtime marketdata feed for a specific market, referenced by-id
-    pub fn marketdata_rt_by_id(&self, market: Market) -> Path {
+    pub fn marketdata_rt_by_id(&self, market: MarketRef) -> Path {
         let cpty = market.cpty();
         if self.use_legacy_marketdata.contains(&cpty.id()) {
             self.marketdata(cpty, false)
@@ -63,7 +63,7 @@ impl Paths {
     }
 
     /// Realtime marketdata feed for a specific market, aliased by-name
-    pub fn marketdata_rt_by_name(&self, market: Market) -> Path {
+    pub fn marketdata_rt_by_name(&self, market: MarketRef) -> Path {
         let cpty = market.cpty();
         if self.use_legacy_marketdata.contains(&cpty.id()) {
             match market.kind {
@@ -94,7 +94,7 @@ impl Paths {
 
     /// Realtime marketdata candles, aliased by-name
     /// If hist is true, pull the name as if we were querying historical data
-    pub fn marketdata_ohlc_by_name(&self, market: Market, hist: bool) -> Path {
+    pub fn marketdata_ohlc_by_name(&self, market: MarketRef, hist: bool) -> Path {
         let cpty = market.cpty();
         if self.use_legacy_marketdata.contains(&cpty.id())
             || (hist && self.use_legacy_hist_marketdata.contains(&cpty.id()))

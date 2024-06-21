@@ -1,4 +1,4 @@
-use super::{allocator::StaticBumpAllocator, static_ref::StaticRef, Venue};
+use super::{allocator::StaticBumpAllocator, static_ref::StaticRef, VenueRef};
 use crate::static_ref;
 use anyhow::{bail, Result};
 use api::{
@@ -21,16 +21,16 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 
-static_ref!(Product, ProductInner, 512);
+static_ref!(ProductRef, ProductInner, 512);
 
-impl Product {
+impl ProductRef {
     /// forward the inner constructor as a convenience
     pub fn new(name: &str, kind: ProductKind) -> Result<api::symbology::Product> {
         api::symbology::Product::new(name, (&kind).into())
     }
 }
 
-impl Serialize for Product {
+impl Serialize for ProductRef {
     fn serialize<S: serde::Serializer>(
         &self,
         serializer: S,
@@ -73,27 +73,27 @@ impl From<&ProductInner> for api::symbology::Product {
 #[derive(Debug, Clone)]
 pub enum ProductKind {
     Coin {
-        token_info: BTreeMap<Venue, TokenInfo>,
+        token_info: BTreeMap<VenueRef, TokenInfo>,
     },
     Fiat,
     Equity,
     Perpetual {
-        underlying: Option<Product>,
+        underlying: Option<ProductRef>,
         multiplier: Option<Decimal>,
         instrument_type: Option<InstrumentType>,
     },
     Future {
-        underlying: Option<Product>,
+        underlying: Option<ProductRef>,
         multiplier: Option<Decimal>,
         expiration: Option<DateTime<Utc>>,
         instrument_type: Option<InstrumentType>,
     },
     FutureSpread {
-        same_side_leg: Option<Product>,
-        opp_side_leg: Option<Product>,
+        same_side_leg: Option<ProductRef>,
+        opp_side_leg: Option<ProductRef>,
     },
     Option {
-        underlying: Option<Product>,
+        underlying: Option<ProductRef>,
         multiplier: Option<Decimal>,
         expiration: Option<DateTime<Utc>>,
         instrument_type: Option<InstrumentType>,
@@ -120,7 +120,7 @@ impl ProductKind {
         }
     }
 
-    pub fn iter_dependents(&self, mut f: impl FnMut(&Product)) {
+    pub fn iter_dependents(&self, mut f: impl FnMut(&ProductRef)) {
         match self {
             ProductKind::Coin { .. }
             | ProductKind::Fiat

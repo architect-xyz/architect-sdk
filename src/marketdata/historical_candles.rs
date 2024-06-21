@@ -16,7 +16,7 @@ use netidx_protocols::{call_rpc, rpc::client::Proc};
 
 pub async fn get(
     common: &Common,
-    market: symbology::Market,
+    market: symbology::MarketRef,
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     width: CandleWidth,

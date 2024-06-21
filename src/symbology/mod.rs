@@ -23,20 +23,20 @@ pub mod static_ref;
 pub mod txn;
 
 pub use index::MarketIndex;
-pub use market::{Market, MarketKind};
-pub use product::{Product, ProductKind};
+pub use market::{MarketKind, MarketRef};
+pub use product::{ProductKind, ProductRef};
 pub use static_ref::StaticRef;
 pub use txn::Txn;
 
 // CR alee: TryFrom/Into api types for Product and Market could be optimized
 // to avoid unnecessary clone; make the Inner types Copy
 
-static_ref!(Venue, api::symbology::Venue, 64);
-static_ref!(Route, api::symbology::Route, 64);
+static_ref!(VenueRef, api::symbology::Venue, 64);
+static_ref!(RouteRef, api::symbology::Route, 64);
 
 // forward the inner [new] impls as a convenience
 
-impl Venue {
+impl VenueRef {
     pub fn new(name: &str) -> Result<api::symbology::Venue> {
         api::symbology::Venue::new(name)
     }
@@ -54,7 +54,7 @@ impl Venue {
     }
 }
 
-impl Route {
+impl RouteRef {
     pub fn new(name: &str) -> Result<api::symbology::Route> {
         api::symbology::Route::new(name)
     }
@@ -63,15 +63,15 @@ impl Route {
 /// Commonly used compound type
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Cpty {
-    pub venue: Venue,
-    pub route: Route,
+    pub venue: VenueRef,
+    pub route: RouteRef,
 }
 
 impl Cpty {
     pub fn get(s: &str) -> Option<Self> {
         if let Some((vstr, rstr)) = s.split_once('/') {
-            let venue = Venue::get(vstr)?;
-            let route = Route::get(rstr)?;
+            let venue = VenueRef::get(vstr)?;
+            let route = RouteRef::get(rstr)?;
             Some(Self { venue, route })
         } else {
             None
@@ -83,14 +83,14 @@ impl Cpty {
     }
 
     pub fn get_by_id(id: &CptyId) -> Option<Self> {
-        let venue = Venue::get_by_id(&id.venue)?;
-        let route = Route::get_by_id(&id.route)?;
+        let venue = VenueRef::get_by_id(&id.venue)?;
+        let route = RouteRef::get_by_id(&id.route)?;
         Some(Self { venue, route })
     }
 
     pub fn find_by_id(id: &CptyId) -> Result<Self> {
-        let venue = Venue::find_by_id(&id.venue)?;
-        let route = Route::find_by_id(&id.route)?;
+        let venue = VenueRef::find_by_id(&id.venue)?;
+        let route = RouteRef::find_by_id(&id.route)?;
         Ok(Self { venue, route })
     }
 
