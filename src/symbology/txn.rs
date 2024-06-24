@@ -17,10 +17,7 @@ use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 static TXN_LOCK: Mutex<()> = Mutex::new(());
 
-/// A symbology update transaction. This is not a traditional ACID
-/// transaction. Specifically dropping a Txn after making changes to
-/// products or tradable products that exist in the global symbology
-/// will not undo those changes.
+/// A symbology update transaction.
 pub struct Txn {
     venue_by_name: Arc<Map<Str, VenueRef>>,
     venue_by_id: Arc<Map<VenueId, VenueRef>>,
@@ -63,45 +60,20 @@ impl Txn {
         MARKET_REF_BY_ID.store(Arc::clone(market_by_id));
     }
 
-    /// Add the symbology in the transaction to the global symbology,
-    /// but don't remove anything from the global symbology. If
-    /// something exists in both places the transaction version will
-    /// overwrite the global version.
-    pub fn merge(self) {
-        let Self {
-            venue_by_name,
-            venue_by_id,
-            route_by_name,
-            route_by_id,
-            product_by_name,
-            product_by_id,
-            market_by_name,
-            market_by_id,
-        } = &self;
-        VENUE_REF_BY_NAME.store(Arc::new(
-            (**VENUE_REF_BY_NAME.load()).union(venue_by_name, |_, _, v| Some(*v)),
-        ));
-        VENUE_REF_BY_ID.store(Arc::new(
-            (**VENUE_REF_BY_ID.load()).union(venue_by_id, |_, _, v| Some(*v)),
-        ));
-        ROUTE_REF_BY_NAME.store(Arc::new(
-            (**ROUTE_REF_BY_NAME.load()).union(route_by_name, |_, _, v| Some(*v)),
-        ));
-        ROUTE_REF_BY_ID.store(Arc::new(
-            (**ROUTE_REF_BY_ID.load()).union(route_by_id, |_, _, v| Some(*v)),
-        ));
-        PRODUCT_REF_BY_NAME.store(Arc::new(
-            (**PRODUCT_REF_BY_NAME.load()).union(product_by_name, |_, _, v| Some(*v)),
-        ));
-        PRODUCT_REF_BY_ID.store(Arc::new(
-            (**PRODUCT_REF_BY_ID.load()).union(product_by_id, |_, _, v| Some(*v)),
-        ));
-        MARKET_REF_BY_NAME.store(Arc::new(
-            (**MARKET_REF_BY_NAME.load()).union(market_by_name, |_, _, v| Some(*v)),
-        ));
-        MARKET_REF_BY_ID.store(Arc::new(
-            (**MARKET_REF_BY_ID.load()).union(market_by_id, |_, _, v| Some(*v)),
-        ));
+    /// Start a new transaction based on the current global
+    /// symbology. Once the transaction starts, the symbology can't
+    /// change underneath you because only one transaction may be
+    /// active at a time. `begin` will block until there are no other
+    /// transactions outstanding. If you want to avoid blocking use
+    /// try_begin.
+    pub fn begin() -> Self {
+        Self::begin_inner(TXN_LOCK.lock())
+    }
+
+    /// Same as begin, but if a transaction is already in progress
+    /// return None instead of blocking.
+    pub fn try_begin() -> Option<Self> {
+        TXN_LOCK.try_lock().map(Self::begin_inner)
     }
 
     fn begin_inner(lock: MutexGuard<'static, ()>) -> Self {
@@ -117,22 +89,6 @@ impl Txn {
             market_by_name: MARKET_REF_BY_NAME.load_full(),
             market_by_id: MARKET_REF_BY_ID.load_full(),
         }
-    }
-
-    /// Start a new transaction based on the current global
-    /// symbology. Once the transaction starts, the symbology can't
-    /// change underneath you because only one transaction may be
-    /// active at a time. `begin` will block until there are no other
-    /// transactions outstanding. If you want to avoid blocking use
-    /// try_begin.
-    pub fn begin() -> Self {
-        Self::begin_inner(TXN_LOCK.lock())
-    }
-
-    /// Same as begin, but if a transaction is already in progress
-    /// return None instead of blocking.
-    pub fn try_begin() -> Option<Self> {
-        TXN_LOCK.try_lock().map(Self::begin_inner)
     }
 
     fn empty_inner(lock: MutexGuard<'static, ()>) -> Self {
@@ -166,8 +122,32 @@ impl Txn {
         self.route_by_id.get(id).copied()
     }
 
+    pub fn get_venue_by_id(&self, id: &VenueId) -> Option<VenueRef> {
+        self.venue_by_id.get(id).copied()
+    }
+
+    pub fn get_product_by_id(&self, id: &ProductId) -> Option<ProductRef> {
+        self.product_by_id.get(id).copied()
+    }
+
+    pub fn get_market_by_id(&self, id: &MarketId) -> Option<MarketRef> {
+        self.market_by_id.get(id).copied()
+    }
+
     pub fn find_route_by_id(&self, id: &RouteId) -> Result<RouteRef> {
         self.get_route_by_id(id).ok_or_else(|| anyhow!("no such route"))
+    }
+
+    pub fn find_venue_by_id(&self, id: &VenueId) -> Result<VenueRef> {
+        self.get_venue_by_id(id).ok_or_else(|| anyhow!("no such venue"))
+    }
+
+    pub fn find_product_by_id(&self, id: &ProductId) -> Result<ProductRef> {
+        self.get_product_by_id(id).ok_or_else(|| anyhow!("no such product"))
+    }
+
+    pub fn find_market_by_id(&self, id: &MarketId) -> Result<MarketRef> {
+        self.get_market_by_id(id).ok_or_else(|| anyhow!("no such market"))
     }
 
     pub fn add_route(&mut self, route: api::symbology::Route) -> Result<RouteRef> {
@@ -180,23 +160,11 @@ impl Txn {
     }
 
     pub fn remove_route(&mut self, route: &RouteId) -> Result<()> {
-        let route = self
-            .route_by_id
-            .get(route)
-            .copied()
-            .ok_or_else(|| anyhow!("no such route"))?;
+        let route = self.find_route_by_id(route)?;
         Ok(route.remove(
             Arc::make_mut(&mut self.route_by_name),
             Arc::make_mut(&mut self.route_by_id),
         ))
-    }
-
-    pub fn get_venue_by_id(&self, id: &VenueId) -> Option<VenueRef> {
-        self.venue_by_id.get(id).copied()
-    }
-
-    pub fn find_venue_by_id(&self, id: &VenueId) -> Result<VenueRef> {
-        self.get_venue_by_id(id).ok_or_else(|| anyhow!("no such venue"))
     }
 
     pub fn add_venue(&mut self, venue: api::symbology::Venue) -> Result<VenueRef> {
@@ -209,19 +177,11 @@ impl Txn {
     }
 
     pub fn remove_venue(&mut self, venue: &VenueId) -> Result<()> {
-        let venue = self
-            .venue_by_id
-            .get(venue)
-            .copied()
-            .ok_or_else(|| anyhow!("no such venue"))?;
+        let venue = self.find_venue_by_id(venue)?;
         Ok(venue.remove(
             Arc::make_mut(&mut self.venue_by_name),
             Arc::make_mut(&mut self.venue_by_id),
         ))
-    }
-
-    fn get_product_by_id(&self, id: &ProductId) -> Option<ProductRef> {
-        self.product_by_id.get(id).copied()
     }
 
     pub fn add_product(
@@ -230,7 +190,7 @@ impl Txn {
     ) -> Result<ProductRef> {
         // manually construct the inner ref type, because we are inside a transaction
         // and the TryFrom impl might not know all the refs yet
-        let inner = self.resolve_product_inner(product)?;
+        let inner = self.hydrate_product_inner(product)?;
         ProductRef::insert(
             Arc::make_mut(&mut self.product_by_name),
             Arc::make_mut(&mut self.product_by_id),
@@ -241,17 +201,17 @@ impl Txn {
 
     /// Construct an sdk::ProductInner from its corresponding API type; hydrates pointers
     /// using the current state of the transaction.
-    fn resolve_product_inner(&self, p: api::symbology::Product) -> Result<ProductInner> {
+    fn hydrate_product_inner(&self, p: api::symbology::Product) -> Result<ProductInner> {
         Ok(ProductInner {
             id: p.id,
             name: p.name,
-            kind: self.resolve_product_kind(p.kind)?,
+            kind: self.hydrate_product_kind(p.kind)?,
         })
     }
 
     /// Construct an sdk::ProductKind from its corresponding API type; hydrates pointers
     /// using the current state of the transaction.
-    fn resolve_product_kind(
+    fn hydrate_product_kind(
         &self,
         kind: api::symbology::ProductKind,
     ) -> Result<ProductKind> {
@@ -260,9 +220,7 @@ impl Txn {
             L::Coin { token_info: ti } => {
                 let mut token_info = BTreeMap::new();
                 for (k, v) in ti {
-                    let k = self
-                        .get_venue_by_id(&k)
-                        .ok_or_else(|| anyhow!("no such venue"))?;
+                    let k = self.find_venue_by_id(&k)?;
                     token_info.insert(k, v);
                 }
                 ProductKind::Coin { token_info }
@@ -273,10 +231,7 @@ impl Txn {
                 ProductKind::Perpetual {
                     underlying: match underlying {
                         None => None,
-                        Some(underlying) => Some(
-                            self.get_product_by_id(&underlying)
-                                .ok_or_else(|| anyhow!("no such underlying"))?,
-                        ),
+                        Some(underlying) => Some(self.find_product_by_id(&underlying)?),
                     },
                     multiplier,
                     instrument_type,
@@ -286,10 +241,7 @@ impl Txn {
                 ProductKind::Future {
                     underlying: match underlying {
                         None => None,
-                        Some(underlying) => Some(
-                            self.get_product_by_id(&underlying)
-                                .ok_or_else(|| anyhow!("no such underlying"))?,
-                        ),
+                        Some(underlying) => Some(self.find_product_by_id(&underlying)?),
                     },
                     multiplier,
                     expiration,
@@ -300,17 +252,11 @@ impl Txn {
                 ProductKind::FutureSpread {
                     same_side_leg: match same_side_leg {
                         None => None,
-                        Some(id) => Some(
-                            self.get_product_by_id(&id)
-                                .ok_or_else(|| anyhow!("no such leg"))?,
-                        ),
+                        Some(id) => Some(self.find_product_by_id(&id)?),
                     },
                     opp_side_leg: match opp_side_leg {
                         None => None,
-                        Some(id) => Some(
-                            self.get_product_by_id(&id)
-                                .ok_or_else(|| anyhow!("no such leg"))?,
-                        ),
+                        Some(id) => Some(self.find_product_by_id(&id)?),
                     },
                 }
             }
@@ -318,10 +264,7 @@ impl Txn {
                 ProductKind::Option {
                     underlying: match underlying {
                         None => None,
-                        Some(underlying) => Some(
-                            self.get_product_by_id(&underlying)
-                                .ok_or_else(|| anyhow!("no such underlying"))?,
-                        ),
+                        Some(underlying) => Some(self.find_product_by_id(&underlying)?),
                     },
                     multiplier,
                     expiration,
@@ -335,11 +278,7 @@ impl Txn {
     }
 
     pub fn remove_product(&mut self, product: &ProductId) -> Result<()> {
-        let product = self
-            .product_by_id
-            .get(product)
-            .copied()
-            .ok_or_else(|| anyhow!("no such product"))?;
+        let product = self.find_product_by_id(product)?;
         Ok(product.remove(
             Arc::make_mut(&mut self.product_by_name),
             Arc::make_mut(&mut self.product_by_id),
@@ -349,7 +288,7 @@ impl Txn {
     pub fn add_market(&mut self, market: api::symbology::Market) -> Result<MarketRef> {
         // manually construct the inner ref type, because we are inside a transaction
         // and the TryFrom impl might not know all the refs yet
-        let inner = self.resolve_market_inner(market)?;
+        let inner = self.hydrate_market_inner(market)?;
         MarketRef::insert(
             Arc::make_mut(&mut self.market_by_name),
             Arc::make_mut(&mut self.market_by_id),
@@ -360,19 +299,13 @@ impl Txn {
 
     /// Construct an sdk::MarketInner from its corresponding API type; hydrates pointers
     /// using the current state of the transaction.
-    pub fn resolve_market_inner(&self, m: api::symbology::Market) -> Result<MarketInner> {
+    pub fn hydrate_market_inner(&self, m: api::symbology::Market) -> Result<MarketInner> {
         Ok(MarketInner {
             id: m.id,
             name: m.name,
-            kind: self.resolve_market_kind(m.kind)?,
-            venue: self
-                .get_venue_by_id(&m.venue)
-                .ok_or_else(|| anyhow!("no such venue"))?
-                .clone(),
-            route: self
-                .get_route_by_id(&m.route)
-                .ok_or_else(|| anyhow!("no such route"))?
-                .clone(),
+            kind: self.hydrate_market_kind(m.kind)?,
+            venue: self.find_venue_by_id(&m.venue)?,
+            route: self.find_route_by_id(&m.route)?,
             exchange_symbol: m.exchange_symbol,
             extra_info: m.extra_info,
         })
@@ -380,7 +313,7 @@ impl Txn {
 
     /// Construct an sdk::MarketKind from its corresponding API type; hydrates pointers
     /// using the current state of the transaction.
-    pub fn resolve_market_kind(
+    pub fn hydrate_market_kind(
         &self,
         mk: api::symbology::MarketKind,
     ) -> Result<MarketKind> {
@@ -412,11 +345,7 @@ impl Txn {
     }
 
     pub fn remove_market(&mut self, market: &MarketId) -> Result<()> {
-        let market = self
-            .market_by_id
-            .get(market)
-            .copied()
-            .ok_or_else(|| anyhow!("no such market"))?;
+        let market = self.find_market_by_id(market)?;
         Ok(market.remove(
             Arc::make_mut(&mut self.market_by_name),
             Arc::make_mut(&mut self.market_by_id),
