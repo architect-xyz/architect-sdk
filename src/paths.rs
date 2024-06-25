@@ -1,4 +1,4 @@
-use crate::symbology::{market::ExchangeMarketKind, Cpty, MarketRef, MarketKind};
+use crate::symbology::{market::ExchangeMarketKind, Cpty, MarketKind, MarketRef};
 use anyhow::{anyhow, bail, Result};
 use api::{marketdata::NetidxFeedPaths, symbology::CptyId, ComponentId};
 use fxhash::{FxHashMap, FxHashSet};

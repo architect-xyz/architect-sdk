@@ -6,7 +6,7 @@
 
 use super::book_client::BookClient;
 use crate::{
-    symbology::{Cpty, MarketRef, MarketKind},
+    symbology::{Cpty, MarketKind, MarketRef},
     synced::Synced,
     Common,
 };
