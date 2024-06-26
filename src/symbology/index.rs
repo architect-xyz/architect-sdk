@@ -1,18 +1,18 @@
 use super::{
-    allocator::AllocatorSnapshot, market::MarketInner, static_ref::StaticRef, MarketKind,
-    MarketRef, ProductKind, ProductRef, RouteRef, VenueRef,
+    static_ref::StaticRef, MarketKind, MarketRef, ProductKind, ProductRef, RouteRef,
+    VenueRef,
 };
 use anyhow::{bail, Result};
 use api::{
     symbology::{
-        market::NormalizedMarketInfo,
         query::{DateQ, Query},
         Symbolic,
     },
     Str,
 };
-use chrono::{prelude::*, Duration};
+use chrono::prelude::*;
 use immutable_chunkmap::{map::MapM as Map, set};
+use std::sync::Arc;
 
 pub type Set<T> = set::Set<T, 16>;
 
@@ -29,7 +29,6 @@ pub struct MarketIndex {
     by_exchange_symbol: Map<Str, Set<MarketRef>>,
     by_underlying: Map<ProductRef, Set<MarketRef>>,
     by_expiration: Map<DateTime<Utc>, Set<MarketRef>>,
-    snap: Option<AllocatorSnapshot<MarketInner>>,
 }
 
 impl FromIterator<MarketRef> for MarketIndex {
@@ -56,8 +55,12 @@ impl MarketIndex {
             by_exchange_symbol: Map::default(),
             by_underlying: Map::default(),
             by_expiration: Map::default(),
-            snap: None,
         }
+    }
+
+    /// easy access to global market index
+    pub fn current() -> arc_swap::Guard<Arc<MarketIndex>> {
+        super::GLOBAL_INDEX.load()
     }
 
     /// insert a market into the index
@@ -139,14 +142,14 @@ impl MarketIndex {
     }
 
     /// remove a tradable product from the index
-    pub fn remove(&mut self, i: MarketRef) {
+    pub fn remove(&mut self, i: &MarketRef) {
         fn remove<K: Ord + Clone + Copy + 'static>(
             m: &mut Map<K, Set<MarketRef>>,
             k: K,
-            i: MarketRef,
+            i: &MarketRef,
         ) {
             if let Some(mut set) = m.remove_cow(&k) {
-                set.remove_cow(&i);
+                set.remove_cow(i);
                 if set.len() > 0 {
                     m.insert_cow(k, set);
                 }
@@ -281,42 +284,6 @@ impl MarketIndex {
                 .map_or_else(Set::new, |p| {
                     self.by_underlying.get(&p).cloned().unwrap_or_else(Set::new)
                 }),
-            Query::Expired => {
-                let now = Utc::now();
-                let res: Set<MarketRef> = self
-                    .all
-                    .into_iter()
-                    .filter(|t| {
-                        if let Some(exp) = match t.kind {
-                            MarketKind::Exchange(ref x) => match x.base.kind {
-                                ProductKind::Future { expiration, .. }
-                                | ProductKind::Option { expiration, .. } => {
-                                    Some(expiration)
-                                }
-                                _ => None,
-                            },
-                            _ => None,
-                        } {
-                            match exp {
-                                None => return false,
-                                Some(exp) => {
-                                    // CR-soon bharrison: I think this is a bug?
-                                    // We're inside `filter` so this is saying,
-                                    // we're *not* "Expired" if now is more than 8 hours
-                                    // past expiration...
-                                    if exp < now - Duration::hours(8) {
-                                        return false;
-                                    }
-                                }
-                            }
-                        }
-                        // CR-soon bharrison: I think this is also incorrect
-                        !t.extra_info.is_delisted()
-                    })
-                    .map(|t| *t)
-                    .collect();
-                res
-            }
             Query::Expiration(dq) => match dq {
                 DateQ::On(dt) => {
                     let date = dt.naive_utc().date();
@@ -341,24 +308,10 @@ impl MarketIndex {
         }
     }
 
-    /// index all the markets that were added to the symbology since the index
-    /// was last updated. If none were added this is very quick. If the index
-    /// has never been updated this will index all tradable products
-    pub fn update(&mut self) {
-        let snap = MarketRef::allocator_snapshot(self.snap, |p| self.insert(p));
-        self.snap = Some(snap);
-    }
-
     /// Query the index, returning the set of all tradable products
     /// that match the query.
     pub fn query(&self, q: &Query) -> Set<MarketRef> {
         self.query_(q)
-    }
-
-    /// This is the same as calling update followed by query
-    pub fn update_and_query(&mut self, q: &Query) -> Set<MarketRef> {
-        self.update();
-        self.query(q)
     }
 
     /// Return all markets in the index

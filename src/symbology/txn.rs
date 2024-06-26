@@ -1,4 +1,6 @@
-use super::{market::*, product::*, *};
+use super::{
+    market::*, product::*, route::*, venue::*, MarketIndex, StaticRef, GLOBAL_INDEX,
+};
 use anyhow::{anyhow, bail, Result};
 use api::{
     pool,
@@ -27,6 +29,7 @@ pub struct Txn {
     product_by_id: Arc<Map<ProductId, ProductRef>>,
     market_by_name: Arc<Map<Str, MarketRef>>,
     market_by_id: Arc<Map<MarketId, MarketRef>>,
+    index: Arc<MarketIndex>,
 }
 
 impl Drop for Txn {
@@ -49,6 +52,7 @@ impl Txn {
             product_by_id,
             market_by_name,
             market_by_id,
+            index,
         } = &self;
         VENUE_REF_BY_NAME.store(Arc::clone(venue_by_name));
         VENUE_REF_BY_ID.store(Arc::clone(venue_by_id));
@@ -58,6 +62,7 @@ impl Txn {
         PRODUCT_REF_BY_ID.store(Arc::clone(product_by_id));
         MARKET_REF_BY_NAME.store(Arc::clone(market_by_name));
         MARKET_REF_BY_ID.store(Arc::clone(market_by_id));
+        GLOBAL_INDEX.store(Arc::clone(index));
     }
 
     /// Start a new transaction based on the current global
@@ -88,6 +93,7 @@ impl Txn {
             product_by_id: PRODUCT_REF_BY_ID.load_full(),
             market_by_name: MARKET_REF_BY_NAME.load_full(),
             market_by_id: MARKET_REF_BY_ID.load_full(),
+            index: GLOBAL_INDEX.load_full(),
         }
     }
 
@@ -102,6 +108,7 @@ impl Txn {
             product_by_id: Arc::new(Map::new()),
             market_by_name: Arc::new(Map::new()),
             market_by_id: Arc::new(Map::new()),
+            index: Arc::new(MarketIndex::new()),
         }
     }
 
@@ -289,12 +296,14 @@ impl Txn {
         // manually construct the inner ref type, because we are inside a transaction
         // and the TryFrom impl might not know all the refs yet
         let inner = self.hydrate_market_inner(market)?;
-        MarketRef::insert(
+        let market = MarketRef::insert(
             Arc::make_mut(&mut self.market_by_name),
             Arc::make_mut(&mut self.market_by_id),
             inner,
             true,
-        )
+        )?;
+        Arc::make_mut(&mut self.index).insert(market.clone());
+        Ok(market)
     }
 
     /// Construct an sdk::MarketInner from its corresponding API type; hydrates pointers
@@ -346,6 +355,7 @@ impl Txn {
 
     pub fn remove_market(&mut self, market: &MarketId) -> Result<()> {
         let market = self.find_market_by_id(market)?;
+        Arc::make_mut(&mut self.index).remove(&market);
         Ok(market.remove(
             Arc::make_mut(&mut self.market_by_name),
             Arc::make_mut(&mut self.market_by_id),
@@ -516,5 +526,60 @@ impl Txn {
             };
             Ok((md5, up))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::symbology::*;
+    use api::symbology::{market::TestMarketInfo, MarketInfo};
+
+    /// It's hard to anticipate the behavior of Arc::make_mut under
+    /// different scenarios, better to test them explicitly.
+    #[test]
+    fn test_concurrent_access() -> Result<()> {
+        let tmi = TestMarketInfo {
+            tick_size: Default::default(),
+            step_size: Default::default(),
+            is_delisted: false,
+        };
+        let mut txn = Txn::begin();
+        let direct = txn.add_route(RouteRef::new("DIRECT")?)?;
+        let test = txn.add_venue(VenueRef::new("TEST")?)?;
+        let usd = txn.add_product(ProductRef::new("USD", ProductKind::Fiat)?)?;
+        let zar = txn.add_product(ProductRef::new("ZAR", ProductKind::Fiat)?)?;
+        txn.add_market(MarketRef::exchange(
+            zar,
+            usd,
+            test,
+            direct,
+            "USDZAR",
+            MarketInfo::Test(tmi.clone()),
+        )?)?;
+        txn.commit();
+        // this symbol should now exist
+        let _exists = MarketIndex::current()
+            .find_exactly_one_by_exchange_symbol(test, direct, "USDZAR")?;
+        // hold the Arc<MarketIndex> over the next txn update--what happens?
+        let index = MarketIndex::current();
+        let mut txn = Txn::begin();
+        let chf = txn.add_product(ProductRef::new("CHF", ProductKind::Fiat)?)?;
+        txn.add_market(MarketRef::exchange(
+            chf,
+            usd,
+            test,
+            direct,
+            "USDCHF",
+            MarketInfo::Test(tmi.clone()),
+        )?)?;
+        txn.commit();
+        let _not_exists =
+            index.find_exactly_one_by_exchange_symbol(test, direct, "USDCHF");
+        assert!(matches!(_not_exists, Err(_)));
+        let updated_index = MarketIndex::current();
+        let _exists =
+            updated_index.find_exactly_one_by_exchange_symbol(test, direct, "USDCHF")?;
+        Ok(())
     }
 }

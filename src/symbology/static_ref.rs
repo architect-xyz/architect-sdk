@@ -13,13 +13,12 @@
 //! functionality for working with symbology.  The macro will also create the necessary
 //! process-global memory pools.
 
-use super::allocator::{AllocatorSnapshot, StaticBumpAllocator};
+use super::allocator::StaticBumpAllocator;
 use anyhow::Result;
 use api::{symbology::Symbolic, Str};
 use arc_swap::ArcSwap;
 use immutable_chunkmap::map::MapL as Map;
 use parking_lot::Mutex;
-use portable_atomic::Ordering;
 use std::{
     ops::Deref,
     str::FromStr,
@@ -33,27 +32,6 @@ pub trait StaticRef<T: Symbolic, const SLAB_SIZE: usize>:
     fn allocator() -> &'static Mutex<StaticBumpAllocator<T, SLAB_SIZE>>;
 
     fn allocator_counter() -> &'static AtomicUsize;
-
-    /// Returns a snapshot of the current global pool of T's
-    fn allocator_snapshot<F: FnMut(Self)>(
-        prev: Option<AllocatorSnapshot<T>>,
-        mut new: F,
-    ) -> AllocatorSnapshot<T> {
-        match prev {
-            None => {
-                Self::allocator().lock().snapshot(prev, |i| new(Self::from_pointee(i)))
-            }
-            Some(p) => {
-                if p.total < Self::allocator_counter().load(Ordering::Relaxed) {
-                    Self::allocator()
-                        .lock()
-                        .snapshot(Some(p), |i| new(Self::from_pointee(i)))
-                } else {
-                    p
-                }
-            }
-        }
-    }
 
     /// Returns a reference to the global map of T's by-name
     fn by_name() -> &'static ArcSwap<Map<Str, Self>>;

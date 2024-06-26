@@ -3,13 +3,13 @@
 //! a mutex, as StaticBumpAllocator::insert isn't thread-safe.
 
 use portable_atomic::Ordering;
-use smallvec::SmallVec;
 use std::{mem::MaybeUninit, sync::atomic::AtomicUsize};
 
 pub struct StaticBumpAllocator<T: Clone + 'static, const SZ: usize> {
     data: &'static mut [MaybeUninit<T>],
     pos: usize,
     total: &'static AtomicUsize,
+    #[allow(unused)]
     prev: Option<&'static Self>,
 }
 
@@ -33,7 +33,6 @@ impl<T: Clone + 'static, const SZ: usize> StaticBumpAllocator<T, SZ> {
                 self,
                 Self { data: Vec::new().leak(), pos: 0, total: self.total, prev: None },
             );
-
             *self = Self {
                 data: Self::new_data(),
                 pos: 0,
@@ -47,54 +46,4 @@ impl<T: Clone + 'static, const SZ: usize> StaticBumpAllocator<T, SZ> {
         self.total.fetch_add(1, Ordering::Relaxed);
         t
     }
-
-    /// call on_new for every T added since previous snapshot, and
-    /// return a new snapshot
-    pub fn snapshot<F: FnMut(&'static T)>(
-        &self,
-        previous: Option<AllocatorSnapshot<T>>,
-        mut on_new: F,
-    ) -> AllocatorSnapshot<T> {
-        let mut cur = self;
-        let mut snaps = SmallVec::<[&Self; 128]>::new();
-        let mut pos = previous.map_or(0, |p| p.pos);
-        // populate snaps with all roots from current to [previous]
-        loop {
-            snaps.push(cur);
-            if let Some(p) = previous {
-                if std::ptr::eq(cur.data as *const _, p.data) {
-                    break;
-                }
-            }
-            match cur.prev {
-                None => break,
-                Some(p) => {
-                    cur = p;
-                }
-            }
-        }
-        for snap in snaps.iter().rev() {
-            for t in &snap.data[pos..snap.pos] {
-                on_new(unsafe { &*t.as_ptr() })
-            }
-            pos = 0;
-        }
-        AllocatorSnapshot {
-            data: self.data as *const _,
-            pos: self.pos,
-            total: self.total.load(Ordering::Relaxed),
-        }
-    }
 }
-
-/// Snapshot cursor into the allocator, used for tracking new objects incrementally.
-#[derive(Debug, Clone)]
-pub struct AllocatorSnapshot<T: 'static> {
-    pub data: *const [MaybeUninit<T>],
-    pub pos: usize,
-    pub total: usize,
-}
-
-impl<T: Clone> Copy for AllocatorSnapshot<T> {}
-unsafe impl<T> Send for AllocatorSnapshot<T> {}
-unsafe impl<T> Sync for AllocatorSnapshot<T> {}

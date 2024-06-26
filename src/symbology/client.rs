@@ -339,3 +339,178 @@ impl WriteRpcs {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::symbology::*;
+    use api::symbology::{
+        market::TestMarketInfo,
+        query::{DateQ, Query},
+        SymbologyUpdateKind,
+    };
+    use chrono::Utc;
+    use rust_decimal_macros::dec;
+
+    /// Demonstrates a symbology bug that could happen.
+    ///
+    /// 1. Load FOO Product with multiplier 5 and FOO/USD Market whose base is FOO
+    /// 2. Call Market::get("FOO/USD Market"), check that the base multiplier is 5
+    /// 3. Update FOO Product with multiplier 10
+    /// 4. Call Market::get("FOO/USD Market"), check that the base multiplier is 10
+    ///
+    /// Step 4 will fail.  It's intuitive and expected that if you call Market::get(..)
+    /// that its return value won't mutate underneath you.  But calling Market::get(..)
+    /// again _after_ an update should certainly reflect the new multiplier.
+    #[test]
+    fn test_update_related_product() -> Result<()> {
+        let mut seq = 0u64;
+        let mut sseq = 0u64;
+        macro_rules! push {
+            ($txn:expr, $u:expr) => {
+                sseq += 1;
+                if !push_update(
+                    &mut $txn,
+                    &None,
+                    &mut seq,
+                    SymbologyUpdate { sequence_number: sseq, kind: $u },
+                ) {
+                    bail!("seqno skip detected")
+                }
+            };
+        }
+        let route = RouteRef::new("DIRECT")?;
+        let venue = VenueRef::new("TEST")?;
+        let usd = ProductRef::new("USD", ProductKind::Fiat)?;
+        let foo = ProductRef::new(
+            "FOO Future",
+            ProductKind::Future {
+                underlying: None,
+                multiplier: Some(dec!(5)),
+                expiration: None,
+                instrument_type: None,
+            },
+        )?;
+        let foo_usd = api::symbology::Market::exchange(
+            &foo,
+            &usd,
+            &venue,
+            &route,
+            "foo_usd",
+            api::symbology::MarketInfo::Test(TestMarketInfo {
+                tick_size: dec!(1),
+                step_size: dec!(1),
+                is_delisted: false,
+            }),
+        )?;
+        let mut txn = Some(Txn::begin());
+        push!(txn, SymbologyUpdateKind::AddRoute(route));
+        push!(txn, SymbologyUpdateKind::AddVenue(venue));
+        push!(txn, SymbologyUpdateKind::AddProduct(usd.clone()));
+        push!(txn, SymbologyUpdateKind::AddProduct(foo));
+        push!(txn, SymbologyUpdateKind::AddMarket(foo_usd));
+        txn.unwrap().commit();
+        let foo = ProductRef::get("FOO Future").unwrap();
+        assert_eq!(foo.kind.multiplier(), dec!(5));
+        let foo_usd = MarketRef::get("FOO Future/USD*TEST/DIRECT").unwrap();
+        assert_eq!(foo_usd.base().unwrap().kind.multiplier(), dec!(5));
+        let foo2 = ProductRef::new(
+            "FOO Future",
+            ProductKind::Future {
+                underlying: None,
+                multiplier: Some(dec!(10)),
+                expiration: None,
+                instrument_type: None,
+            },
+        )?;
+        let mut txn = Some(Txn::begin());
+        push!(txn, SymbologyUpdateKind::AddProduct(foo2));
+        txn.unwrap().commit();
+        let foo2 = ProductRef::get("FOO Future").unwrap();
+        assert_eq!(foo2.kind.multiplier(), dec!(10));
+        let foo_usd = MarketRef::get("FOO Future/USD*TEST/DIRECT").unwrap();
+        assert_eq!(foo_usd.base().unwrap().kind.multiplier(), dec!(10));
+        Ok(())
+    }
+
+    /// Another symbology bug that could happen.
+    ///
+    /// 1. Load FOO Product with expiration now
+    /// 2. Call MarketIndex::query(Query::Expiration(DateQ::On(now))), expect 1 result
+    /// 3. Update FOO Product with expiration now + 1 day
+    /// 4. Call MarketIndex::query(Query::Expiration(DateQ::On(now))), expect 0 results
+    ///
+    /// Step 4 will return the wrong thing.
+    ///
+    /// This one is easier to fix in theory, just be more careful about updating the index.
+    #[test]
+    fn test_update_market_index() -> Result<()> {
+        let mut seq = 0u64;
+        let mut sseq = 0u64;
+        macro_rules! push {
+            ($txn:expr, $u:expr) => {
+                sseq += 1;
+                if !push_update(
+                    &mut $txn,
+                    &None,
+                    &mut seq,
+                    SymbologyUpdate { sequence_number: sseq, kind: $u },
+                ) {
+                    bail!("seqno skip detected")
+                }
+            };
+        }
+        let route = RouteRef::new("DIRECT")?;
+        let venue = VenueRef::new("TEST")?;
+        let usd = ProductRef::new("USD", ProductKind::Fiat)?;
+        let now = Utc::now();
+        let foo = ProductRef::new(
+            "FOO Future",
+            ProductKind::Future {
+                underlying: None,
+                multiplier: None,
+                expiration: Some(now),
+                instrument_type: None,
+            },
+        )?;
+        let foo_usd = api::symbology::Market::exchange(
+            &foo,
+            &usd,
+            &venue,
+            &route,
+            "foo_usd",
+            api::symbology::MarketInfo::Test(TestMarketInfo {
+                tick_size: dec!(1),
+                step_size: dec!(1),
+                is_delisted: false,
+            }),
+        )?;
+        let mut txn = Some(Txn::begin());
+        push!(txn, SymbologyUpdateKind::AddRoute(route));
+        push!(txn, SymbologyUpdateKind::AddVenue(venue));
+        push!(txn, SymbologyUpdateKind::AddProduct(usd.clone()));
+        push!(txn, SymbologyUpdateKind::AddProduct(foo));
+        push!(txn, SymbologyUpdateKind::AddMarket(foo_usd));
+        txn.unwrap().commit();
+        let res = MarketIndex::current().query(&Query::Expiration(DateQ::On(now)));
+        // expecting exactly one result, "FOO Future/USD"
+        assert_eq!(res.len(), 1);
+        // update the expiration of FOO Future to some other time
+        let foo2 = ProductRef::new(
+            "FOO Future",
+            ProductKind::Future {
+                underlying: None,
+                multiplier: None,
+                expiration: Some(now + chrono::Duration::days(1)),
+                instrument_type: None,
+            },
+        )?;
+        let mut txn = Some(Txn::begin());
+        push!(txn, SymbologyUpdateKind::AddProduct(foo2));
+        txn.unwrap().commit();
+        // intuitively we expect this query to now have zero results
+        let res = MarketIndex::current().query(&Query::Expiration(DateQ::On(now)));
+        assert_eq!(res.len(), 0);
+        Ok(())
+    }
+}

@@ -192,9 +192,7 @@ impl From<PoolMarketKind> for api::symbology::market::PoolMarketKind {
 /// E.g. CQG markets should actually display using Databento marketdata instead of
 /// CQG marketdata;  this functions gives the preferred display market for a given
 /// trading market.
-pub fn preferred_marketdata_market(
-    trading_market: MarketRef,
-) -> anyhow::Result<MarketRef> {
+pub fn preferred_marketdata_market(trading_market: MarketRef) -> Result<MarketRef> {
     if trading_market.route.name.as_str() == "CQG" {
         let trading_name = trading_market.name.as_str();
         let data_name = trading_name.replace("CQG", "DATABENTO");
@@ -203,9 +201,7 @@ pub fn preferred_marketdata_market(
     Ok(trading_market)
 }
 
-pub fn preferred_trading_market(
-    marketdata_market: MarketRef,
-) -> anyhow::Result<MarketRef> {
+pub fn preferred_trading_market(marketdata_market: MarketRef) -> Result<MarketRef> {
     if marketdata_market.venue.name.as_str() == "CME" {
         let display_name = marketdata_market.name.as_str();
         let trading_name = display_name.replace("DATABENTO", "CQG");
