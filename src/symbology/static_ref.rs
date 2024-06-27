@@ -114,7 +114,8 @@ pub trait StaticRef<T: Symbolic, const SLAB_SIZE: usize>:
 #[macro_export]
 macro_rules! static_ref {
     ($name:ident, $inner:ty, $slab_size:literal) => {
-        #[derive(Debug, Clone, Copy)]
+        #[derive(Debug, Clone, Copy, serde::Serialize)]
+        #[serde(transparent)]
         pub struct $name(&'static $inner);
 
         paste::paste! {

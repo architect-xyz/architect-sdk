@@ -17,6 +17,7 @@ use immutable_chunkmap::map::MapL as Map;
 use netidx::path::Path;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use serde::Serialize;
 use smallvec::SmallVec;
 use std::sync::{atomic::AtomicUsize, Arc};
 
@@ -107,7 +108,7 @@ impl NetidxFeedPaths for MarketRef {
 }
 
 /// Derivation of `api::symbology::Market` where ids are replaced with StaticRef's.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MarketInner {
     pub id: MarketId,
     pub name: Str,
@@ -152,7 +153,7 @@ impl Symbolic for MarketInner {
 }
 
 /// Derivation of `api::symbology::MarketKind` where ids are replaced with StaticRef's.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum MarketKind {
     Exchange(ExchangeMarketKind),
     Pool(PoolMarketKind),
@@ -172,7 +173,7 @@ impl From<&MarketKind> for api::symbology::MarketKind {
 }
 
 /// Derivation of `api::symbology::ExchangeMarketKind` where ids are replaced with StaticRef's.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct ExchangeMarketKind {
     pub base: ProductRef,
     pub quote: ProductRef,
@@ -188,7 +189,7 @@ impl From<ExchangeMarketKind> for api::symbology::market::ExchangeMarketKind {
 }
 
 /// Derivation of `api::symbology::PoolMarketKind` where ids are replaced with StaticRef's.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PoolMarketKind {
     pub products: SmallVec<[ProductRef; 2]>,
 }

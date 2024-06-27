@@ -36,17 +36,8 @@ impl From<&ProductRef> for api::symbology::Product {
     }
 }
 
-impl Serialize for ProductRef {
-    fn serialize<S: serde::Serializer>(
-        &self,
-        serializer: S,
-    ) -> std::result::Result<S::Ok, S::Error> {
-        self.name.serialize(serializer)
-    }
-}
-
 /// Derivation of `api::symbology::Product` where ids are replaced with StaticRef's.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProductInner {
     pub id: ProductId,
     pub name: Str,
@@ -92,7 +83,7 @@ impl Symbolic for ProductInner {
 }
 
 /// Derivation of `api::symbology::ProductKind` where ids are replaced with StaticRef's.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ProductKind {
     Coin {
         token_info: BTreeMap<VenueRef, TokenInfo>,
