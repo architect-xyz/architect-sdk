@@ -33,8 +33,8 @@ impl MarketRef {
         extra_info: api::symbology::MarketInfo,
     ) -> Result<api::symbology::Market> {
         api::symbology::Market::exchange(
-            &api::symbology::Product::from(&*base),
-            &api::symbology::Product::from(&*quote),
+            &api::symbology::Product::from(&base),
+            &api::symbology::Product::from(&quote),
             &*venue,
             &*route,
             exchange_symbol,
@@ -51,7 +51,7 @@ impl MarketRef {
         extra_info: api::symbology::MarketInfo,
     ) -> Result<api::symbology::Market> {
         api::symbology::Market::pool(
-            products.map(|p| (&*p).into()),
+            products.map(|p| (&p).into()),
             &venue,
             &route,
             exchange_symbol,
@@ -72,6 +72,20 @@ impl MarketRef {
     }
 }
 
+impl From<MarketRef> for api::symbology::Market {
+    fn from(m: MarketRef) -> api::symbology::Market {
+        api::symbology::Market {
+            id: m.id,
+            name: m.name,
+            kind: (&m.kind).into(),
+            venue: m.venue.id,
+            route: m.route.id,
+            exchange_symbol: m.exchange_symbol,
+            extra_info: m.extra_info.clone(),
+        }
+    }
+}
+
 impl NetidxFeedPaths for MarketRef {
     fn path_by_id(&self, base: &Path) -> Path {
         base.append("by-id").append(&self.id.to_string())
@@ -83,14 +97,7 @@ impl NetidxFeedPaths for MarketRef {
             MarketKind::Exchange(emk) => {
                 path.append(&emk.base.name).append(&emk.quote.name)
             }
-            MarketKind::Pool(pmk) => {
-                let mut path = path;
-                for p in &pmk.products {
-                    path = path.append(&p.name);
-                }
-                path
-            }
-            MarketKind::Unknown => path.append("UNKNOWN"),
+            MarketKind::Pool(_) | MarketKind::Unknown => path.append(&self.name),
         }
     }
 
@@ -111,6 +118,23 @@ pub struct MarketInner {
     pub extra_info: MarketInfo,
 }
 
+impl MarketInner {
+    pub fn iter_references(&self, mut f: impl FnMut(ProductRef)) {
+        match &self.kind {
+            MarketKind::Exchange(emk) => {
+                f(emk.base);
+                f(emk.quote);
+            }
+            MarketKind::Pool(pmk) => {
+                for p in &pmk.products {
+                    f(*p);
+                }
+            }
+            MarketKind::Unknown => {}
+        }
+    }
+}
+
 impl Symbolic for MarketInner {
     type Id = MarketId;
 
@@ -127,20 +151,6 @@ impl Symbolic for MarketInner {
     }
 }
 
-impl From<MarketInner> for api::symbology::Market {
-    fn from(m: MarketInner) -> api::symbology::Market {
-        api::symbology::Market {
-            id: m.id,
-            name: m.name,
-            kind: m.kind.into(),
-            venue: m.venue.id,
-            route: m.route.id,
-            exchange_symbol: m.exchange_symbol,
-            extra_info: m.extra_info,
-        }
-    }
-}
-
 /// Derivation of `api::symbology::MarketKind` where ids are replaced with StaticRef's.
 #[derive(Debug, Clone)]
 pub enum MarketKind {
@@ -149,11 +159,13 @@ pub enum MarketKind {
     Unknown,
 }
 
-impl From<MarketKind> for api::symbology::MarketKind {
-    fn from(mk: MarketKind) -> api::symbology::MarketKind {
+impl From<&MarketKind> for api::symbology::MarketKind {
+    fn from(mk: &MarketKind) -> api::symbology::MarketKind {
         match mk {
-            MarketKind::Exchange(emk) => api::symbology::MarketKind::Exchange(emk.into()),
-            MarketKind::Pool(pmk) => api::symbology::MarketKind::Pool(pmk.into()),
+            MarketKind::Exchange(emk) => {
+                api::symbology::MarketKind::Exchange((*emk).into())
+            }
+            MarketKind::Pool(pmk) => api::symbology::MarketKind::Pool(pmk.clone().into()),
             MarketKind::Unknown => api::symbology::MarketKind::Unknown,
         }
     }

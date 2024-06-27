@@ -64,7 +64,7 @@ async fn load_history(
                 push_update(&mut txn, f, &mut seq, u);
             }
             if let Some(txn) = txn {
-                txn.commit();
+                txn.commit()?;
             }
             debug!("history load finished with seqno = {seq}");
         }
@@ -344,10 +344,13 @@ impl WriteRpcs {
 mod tests {
     use super::*;
     use crate::symbology::*;
-    use api::symbology::{
-        market::TestMarketInfo,
-        query::{DateQ, Query},
-        SymbologyUpdateKind,
+    use api::{
+        symbology::{
+            market::TestMarketInfo,
+            query::{DateQ, Query},
+            Symbolic, SymbologyUpdateKind,
+        },
+        Str,
     };
     use chrono::Utc;
     use rust_decimal_macros::dec;
@@ -379,13 +382,18 @@ mod tests {
                 }
             };
         }
+        let mut txn = Some(Txn::begin());
+        let foo_index = ProductRef::new("FOO Index", ProductKind::Index)?;
+        push!(txn, SymbologyUpdateKind::AddProduct(foo_index));
+        txn.unwrap().commit().unwrap();
         let route = RouteRef::new("DIRECT")?;
         let venue = VenueRef::new("TEST")?;
         let usd = ProductRef::new("USD", ProductKind::Fiat)?;
+        let foo_index = ProductRef::get("FOO Index").unwrap();
         let foo = ProductRef::new(
             "FOO Future",
             ProductKind::Future {
-                underlying: None,
+                underlying: Some(foo_index),
                 multiplier: Some(dec!(5)),
                 expiration: None,
                 instrument_type: None,
@@ -409,15 +417,16 @@ mod tests {
         push!(txn, SymbologyUpdateKind::AddProduct(usd.clone()));
         push!(txn, SymbologyUpdateKind::AddProduct(foo));
         push!(txn, SymbologyUpdateKind::AddMarket(foo_usd));
-        txn.unwrap().commit();
+        txn.unwrap().commit().unwrap();
         let foo = ProductRef::get("FOO Future").unwrap();
         assert_eq!(foo.kind.multiplier(), dec!(5));
         let foo_usd = MarketRef::get("FOO Future/USD*TEST/DIRECT").unwrap();
         assert_eq!(foo_usd.base().unwrap().kind.multiplier(), dec!(5));
+        let foo_index = ProductRef::get("FOO Index").unwrap();
         let foo2 = ProductRef::new(
             "FOO Future",
             ProductKind::Future {
-                underlying: None,
+                underlying: Some(foo_index),
                 multiplier: Some(dec!(10)),
                 expiration: None,
                 instrument_type: None,
@@ -425,11 +434,39 @@ mod tests {
         )?;
         let mut txn = Some(Txn::begin());
         push!(txn, SymbologyUpdateKind::AddProduct(foo2));
-        txn.unwrap().commit();
+        txn.unwrap().commit().unwrap();
         let foo2 = ProductRef::get("FOO Future").unwrap();
         assert_eq!(foo2.kind.multiplier(), dec!(10));
         let foo_usd = MarketRef::get("FOO Future/USD*TEST/DIRECT").unwrap();
         assert_eq!(foo_usd.base().unwrap().kind.multiplier(), dec!(10));
+        // also test product->product reference updates
+        let updated_foo_index = ProductRef::new(
+            "FOO Index",
+            ProductKind::Equity, // nonsense change but just to test
+        )?;
+        let mut txn = Some(Txn::begin());
+        push!(txn, SymbologyUpdateKind::AddProduct(updated_foo_index));
+        txn.unwrap().commit().unwrap();
+        let foo_index = ProductRef::get("FOO Index").unwrap();
+        assert!(matches!(foo_index.kind, ProductKind::Equity));
+        let foo_future = ProductRef::get("FOO Future").unwrap();
+        assert!(matches!(
+            foo_future.kind.underlying().unwrap().kind,
+            ProductKind::Equity
+        ));
+        let foo_usd = MarketRef::get("FOO Future/USD*TEST/DIRECT").unwrap();
+        assert!(matches!(
+            foo_usd.base().unwrap().kind.underlying().unwrap().kind,
+            ProductKind::Equity
+        ));
+        // test that MarketIndex has picked up the base kind change
+        let res = MarketIndex::current().query(&Query::Base(foo_future.name()));
+        assert_eq!(res.len(), 1);
+        let res: Vec<_> = res.into_iter().collect();
+        assert_eq!(
+            res[0].base().unwrap().kind.underlying().unwrap().kind,
+            ProductKind::Equity
+        );
         Ok(())
     }
 
@@ -491,7 +528,7 @@ mod tests {
         push!(txn, SymbologyUpdateKind::AddProduct(usd.clone()));
         push!(txn, SymbologyUpdateKind::AddProduct(foo));
         push!(txn, SymbologyUpdateKind::AddMarket(foo_usd));
-        txn.unwrap().commit();
+        txn.unwrap().commit().unwrap();
         let res = MarketIndex::current().query(&Query::Expiration(DateQ::On(now)));
         // expecting exactly one result, "FOO Future/USD"
         assert_eq!(res.len(), 1);
@@ -507,10 +544,21 @@ mod tests {
         )?;
         let mut txn = Some(Txn::begin());
         push!(txn, SymbologyUpdateKind::AddProduct(foo2));
-        txn.unwrap().commit();
+        txn.unwrap().commit().unwrap();
         // intuitively we expect this query to now have zero results
         let res = MarketIndex::current().query(&Query::Expiration(DateQ::On(now)));
         assert_eq!(res.len(), 0);
+        // update the kind of foo2 to something else
+        let foo3 = ProductRef::new("FOO Future", ProductKind::Equity)?;
+        let mut txn = Some(Txn::begin());
+        push!(txn, SymbologyUpdateKind::AddProduct(foo3));
+        txn.unwrap().commit().unwrap();
+        // check the kind of FOO Future which is now Equity was indexed
+        let res = MarketIndex::current()
+            .query(&Query::BaseKind(Str::try_from("Equity").unwrap()));
+        assert_eq!(res.len(), 1);
+        let res: Vec<_> = res.into_iter().collect();
+        assert_eq!(res[0].base().unwrap().kind, ProductKind::Equity);
         Ok(())
     }
 }

@@ -20,6 +20,10 @@ pub type Set<T> = set::Set<T, 16>;
 #[derive(Debug, Clone)]
 pub struct MarketIndex {
     all: Set<MarketRef>,
+    // track which products/markets reference which products,
+    // so we can update products/markets when products update
+    pub(super) by_pointee_p: Map<ProductRef, set::SetM<ProductRef>>,
+    pub(super) by_pointee_m: Map<ProductRef, set::SetM<MarketRef>>,
     by_base: Map<ProductRef, Set<MarketRef>>,
     by_base_kind: Map<Str, Set<MarketRef>>,
     by_pool_has: Map<ProductRef, Set<MarketRef>>,
@@ -46,6 +50,8 @@ impl MarketIndex {
     pub fn new() -> Self {
         Self {
             all: Set::new(),
+            by_pointee_p: Map::default(),
+            by_pointee_m: Map::default(),
             by_base: Map::default(),
             by_base_kind: Map::default(),
             by_quote: Map::default(),
@@ -139,9 +145,13 @@ impl MarketIndex {
             }
             MarketKind::Unknown => (),
         }
+        // insert references
+        i.iter_references(|r| {
+            self.by_pointee_m.get_or_default_cow(r).insert_cow(i);
+        });
     }
 
-    /// remove a tradable product from the index
+    /// remove a market from the index
     pub fn remove(&mut self, i: &MarketRef) {
         fn remove<K: Ord + Clone + Copy + 'static>(
             m: &mut Map<K, Set<MarketRef>>,
@@ -220,6 +230,19 @@ impl MarketIndex {
             }
             MarketKind::Unknown => (),
         }
+        // remove references
+        i.iter_references(|r| {
+            if let Some(m) = self.by_pointee_m.get_mut_cow(&r) {
+                m.remove_cow(i);
+            }
+        });
+    }
+
+    pub(super) fn remove_product(&mut self, p: &ProductRef) {
+        self.by_base.remove_cow(&p);
+        self.by_pool_has.remove_cow(&p);
+        self.by_quote.remove_cow(&p);
+        self.by_underlying.remove_cow(&p);
     }
 
     fn query_(&self, q: &Query) -> Set<MarketRef> {

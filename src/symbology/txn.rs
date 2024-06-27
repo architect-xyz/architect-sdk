@@ -9,13 +9,17 @@ use api::{
 };
 use bytes::{Buf, Bytes, BytesMut};
 use fxhash::FxHashSet;
-use immutable_chunkmap::map::MapL as Map;
+use immutable_chunkmap::{map::MapL as Map, set};
 use log::warn;
 use md5::{Digest, Md5};
 use netidx::{pack::Pack, pool::Pooled};
 use parking_lot::{Mutex, MutexGuard};
 use smallvec::SmallVec;
-use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    sync::{atomic::Ordering, Arc},
+};
 
 static TXN_LOCK: Mutex<()> = Mutex::new(());
 
@@ -30,6 +34,11 @@ pub struct Txn {
     market_by_name: Arc<Map<Str, MarketRef>>,
     market_by_id: Arc<Map<MarketId, MarketRef>>,
     index: Arc<MarketIndex>,
+    corrupted: bool,
+    num_products_added: usize,
+    num_markets_added: usize,
+    product_ref_count_at_begin: usize,
+    market_ref_count_at_begin: usize,
 }
 
 impl Drop for Txn {
@@ -42,7 +51,10 @@ impl Txn {
     /// Commit the transaction to the symbology. This will replace the
     /// global symbology with whatever is in the transaction, so keep
     /// that in mind if you started from empty.
-    pub fn commit(self) {
+    ///
+    /// If the transaction was corrupted, does not commit and instead
+    /// returns error.
+    pub fn commit(self) -> Result<()> {
         let Self {
             venue_by_name,
             venue_by_id,
@@ -53,7 +65,31 @@ impl Txn {
             market_by_name,
             market_by_id,
             index,
+            corrupted,
+            num_products_added,
+            num_markets_added,
+            product_ref_count_at_begin,
+            market_ref_count_at_begin,
         } = &self;
+        if *corrupted {
+            bail!("corrupted symbology transaction--cannot commit");
+        }
+        let product_ref_count = (*PRODUCT_REF_COUNT).load(Ordering::SeqCst);
+        let market_ref_count = (*MARKET_REF_COUNT).load(Ordering::SeqCst);
+        let product_refs_allocated = product_ref_count - *product_ref_count_at_begin;
+        let market_refs_allocated = market_ref_count - *market_ref_count_at_begin;
+        if product_refs_allocated >= 2 * *num_products_added {
+            warn!(
+                "large symbology update cascade: allocated {} product refs for {} products",
+                product_refs_allocated, num_products_added
+            );
+        }
+        if market_refs_allocated >= 2 * *num_markets_added {
+            warn!(
+                "large symbology update cascade: allocated {} market refs for {} markets",
+                market_refs_allocated, num_markets_added
+            );
+        }
         VENUE_REF_BY_NAME.store(Arc::clone(venue_by_name));
         VENUE_REF_BY_ID.store(Arc::clone(venue_by_id));
         ROUTE_REF_BY_NAME.store(Arc::clone(route_by_name));
@@ -63,6 +99,7 @@ impl Txn {
         MARKET_REF_BY_NAME.store(Arc::clone(market_by_name));
         MARKET_REF_BY_ID.store(Arc::clone(market_by_id));
         GLOBAL_INDEX.store(Arc::clone(index));
+        Ok(())
     }
 
     /// Start a new transaction based on the current global
@@ -94,6 +131,11 @@ impl Txn {
             market_by_name: MARKET_REF_BY_NAME.load_full(),
             market_by_id: MARKET_REF_BY_ID.load_full(),
             index: GLOBAL_INDEX.load_full(),
+            corrupted: false,
+            num_products_added: 0,
+            num_markets_added: 0,
+            product_ref_count_at_begin: (*PRODUCT_REF_COUNT).load(Ordering::SeqCst),
+            market_ref_count_at_begin: (*MARKET_REF_COUNT).load(Ordering::SeqCst),
         }
     }
 
@@ -109,6 +151,11 @@ impl Txn {
             market_by_name: Arc::new(Map::new()),
             market_by_id: Arc::new(Map::new()),
             index: Arc::new(MarketIndex::new()),
+            corrupted: false,
+            num_products_added: 0,
+            num_markets_added: 0,
+            product_ref_count_at_begin: 0,
+            market_ref_count_at_begin: 0,
         }
     }
 
@@ -197,13 +244,101 @@ impl Txn {
     ) -> Result<ProductRef> {
         // manually construct the inner ref type, because we are inside a transaction
         // and the TryFrom impl might not know all the refs yet
+        let existing = self.get_product_by_id(&product.id);
         let inner = self.hydrate_product_inner(product)?;
-        ProductRef::insert(
+        // atomic section--all operations must succeed for txn to be considered uncorrupted
+        self.corrupted = true;
+        // check if this is equivalent to the existing product, if so, just return it
+        let to_update = if let Some(existing) = existing {
+            if *existing == inner {
+                self.corrupted = false;
+                return Ok(existing);
+            } else {
+                // going to update this product, remove this version from the index
+                // and return its referers for update as well; this operation should
+                // cascade through all referer products and markets
+                let index = Arc::make_mut(&mut self.index);
+                let mut to_update_p = set::SetM::new();
+                // unrolled BFS over by_pointee_p
+                let mut to_chase_p: FxHashSet<ProductRef> = FxHashSet::default();
+                to_chase_p.insert(existing);
+                while !to_chase_p.is_empty() {
+                    let mut next =
+                        std::mem::replace(&mut to_chase_p, FxHashSet::default());
+                    for cur in next.drain() {
+                        to_update_p.insert_cow(cur);
+                        let (_, referers) = index.by_pointee_p.remove(&existing);
+                        if let Some(referers) = referers {
+                            for p in &referers {
+                                if !to_update_p.contains(p) {
+                                    to_chase_p.insert(*p);
+                                }
+                            }
+                        }
+                    }
+                }
+                let mut to_update_m = set::SetM::new();
+                for p in &to_update_p {
+                    let (_, referers) = index.by_pointee_m.remove(&p);
+                    if let Some(referers) = referers {
+                        to_update_m = to_update_m.union(&referers);
+                    }
+                }
+                // remove existing root to avoid double rehydration
+                to_update_p.remove_cow(&existing);
+                Some((to_update_p, to_update_m))
+            }
+        } else {
+            None
+        };
+        let product = ProductRef::insert(
             Arc::make_mut(&mut self.product_by_name),
             Arc::make_mut(&mut self.product_by_id),
             inner,
             true,
-        )
+        )?;
+        {
+            let index = Arc::make_mut(&mut self.index);
+            product.iter_references(|r| {
+                index.by_pointee_p.get_or_default_cow(r).insert_cow(product);
+            });
+        }
+        if let Some((to_update_p, to_update_m)) = to_update {
+            // update all referer products
+            for p in &to_update_p {
+                // scrub the index of p, will be added back when markets rehydrate
+                Arc::make_mut(&mut self.index).remove_product(p);
+                let to_rehydrate: api::symbology::Product = p.into();
+                let rehydrated = self.hydrate_product_inner(to_rehydrate)?;
+                let product = ProductRef::insert(
+                    Arc::make_mut(&mut self.product_by_name),
+                    Arc::make_mut(&mut self.product_by_id),
+                    rehydrated,
+                    true,
+                )?;
+                let index = Arc::make_mut(&mut self.index);
+                product.iter_references(|r| {
+                    index.by_pointee_p.get_or_default_cow(r).insert_cow(product);
+                });
+            }
+            // for every referer market, remove the old market, which refers to the
+            // old version of the product, and insert a newly hydrated one
+            for old_market in &to_update_m {
+                Arc::make_mut(&mut self.index).remove(old_market);
+                let to_rehydrate: api::symbology::Market = (*old_market).into();
+                let rehydrated = self.hydrate_market_inner(to_rehydrate)?;
+                let market = MarketRef::insert(
+                    Arc::make_mut(&mut self.market_by_name),
+                    Arc::make_mut(&mut self.market_by_id),
+                    rehydrated,
+                    true,
+                )?;
+                Arc::make_mut(&mut self.index).insert(market);
+            }
+        }
+        self.corrupted = false;
+        self.num_products_added += 1;
+        Ok(product)
     }
 
     /// Construct an sdk::ProductInner from its corresponding API type; hydrates pointers
@@ -296,6 +431,8 @@ impl Txn {
         // manually construct the inner ref type, because we are inside a transaction
         // and the TryFrom impl might not know all the refs yet
         let inner = self.hydrate_market_inner(market)?;
+        // atomic section--both operations must succeed for txn to be considered uncorrupted
+        self.corrupted = true;
         let market = MarketRef::insert(
             Arc::make_mut(&mut self.market_by_name),
             Arc::make_mut(&mut self.market_by_id),
@@ -303,6 +440,8 @@ impl Txn {
             true,
         )?;
         Arc::make_mut(&mut self.index).insert(market.clone());
+        self.corrupted = false;
+        self.num_markets_added += 1;
         Ok(market)
     }
 
@@ -355,11 +494,15 @@ impl Txn {
 
     pub fn remove_market(&mut self, market: &MarketId) -> Result<()> {
         let market = self.find_market_by_id(market)?;
+        // atomic section--both operations must succeed for txn to be considered uncorrupted
+        self.corrupted = true;
         Arc::make_mut(&mut self.index).remove(&market);
-        Ok(market.remove(
+        market.remove(
             Arc::make_mut(&mut self.market_by_name),
             Arc::make_mut(&mut self.market_by_id),
-        ))
+        );
+        self.corrupted = false;
+        Ok(())
     }
 
     /// Updates are idempotent; symbology update replays should be harmless
@@ -447,14 +590,14 @@ impl Txn {
         updates: &mut Vec<SymbologyUpdateKind>,
         product: &ProductRef,
     ) {
-        product.kind.iter_dependents(|p| {
-            if !pset.contains(p) {
-                self.dump_product(pset, updates, p);
+        product.iter_references(|p| {
+            if !pset.contains(&p) {
+                self.dump_product(pset, updates, &p);
             }
         });
         if !pset.contains(product) {
             pset.insert(*product);
-            updates.push(SymbologyUpdateKind::AddProduct((&**product).into()));
+            updates.push(SymbologyUpdateKind::AddProduct(product.into()));
         }
     }
 
@@ -474,7 +617,7 @@ impl Txn {
             self.dump_product(&mut pset, &mut updates, &product);
         }
         for (_, market) in &*self.market_by_id {
-            updates.push(SymbologyUpdateKind::AddMarket((**market).clone().into()));
+            updates.push(SymbologyUpdateKind::AddMarket((*market).into()));
         }
         updates
     }
@@ -557,7 +700,7 @@ mod tests {
             "USDZAR",
             MarketInfo::Test(tmi.clone()),
         )?)?;
-        txn.commit();
+        txn.commit()?;
         // this symbol should now exist
         let _exists = MarketIndex::current()
             .find_exactly_one_by_exchange_symbol(test, direct, "USDZAR")?;
@@ -573,13 +716,41 @@ mod tests {
             "USDCHF",
             MarketInfo::Test(tmi.clone()),
         )?)?;
-        txn.commit();
+        txn.commit()?;
         let _not_exists =
             index.find_exactly_one_by_exchange_symbol(test, direct, "USDCHF");
         assert!(matches!(_not_exists, Err(_)));
         let updated_index = MarketIndex::current();
         let _exists =
             updated_index.find_exactly_one_by_exchange_symbol(test, direct, "USDCHF")?;
+        Ok(())
+    }
+
+    /// This should be prevented by other means, but in the worst case we should
+    /// ensure that we don't spinlock if there is a circular reference
+    #[test]
+    fn test_circular_reference() -> Result<()> {
+        let mut txn = Txn::begin();
+        let p1 = txn.add_product(ProductRef::new("P1", ProductKind::Fiat)?)?;
+        let p2 = txn.add_product(ProductRef::new(
+            "P2",
+            ProductKind::Future {
+                underlying: Some(p1),
+                multiplier: None,
+                expiration: None,
+                instrument_type: None,
+            },
+        )?)?;
+        let _p1 = txn.add_product(ProductRef::new(
+            "P1",
+            ProductKind::Future {
+                underlying: Some(p2),
+                multiplier: None,
+                expiration: None,
+                instrument_type: None,
+            },
+        )?)?;
+        txn.commit().unwrap();
         Ok(())
     }
 }

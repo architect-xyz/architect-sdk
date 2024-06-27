@@ -30,6 +30,12 @@ impl ProductRef {
     }
 }
 
+impl From<&ProductRef> for api::symbology::Product {
+    fn from(p: &ProductRef) -> api::symbology::Product {
+        api::symbology::Product { id: p.id, name: p.name, kind: (&p.kind).into() }
+    }
+}
+
 impl Serialize for ProductRef {
     fn serialize<S: serde::Serializer>(
         &self,
@@ -40,11 +46,33 @@ impl Serialize for ProductRef {
 }
 
 /// Derivation of `api::symbology::Product` where ids are replaced with StaticRef's.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProductInner {
     pub id: ProductId,
     pub name: Str,
     pub kind: ProductKind,
+}
+
+impl ProductInner {
+    pub fn iter_references(&self, mut f: impl FnMut(ProductRef)) {
+        match &self.kind {
+            ProductKind::Coin { .. }
+            | ProductKind::Fiat
+            | ProductKind::Equity
+            | ProductKind::Index
+            | ProductKind::Commodity
+            | ProductKind::Unknown => {}
+            ProductKind::Perpetual { underlying, .. }
+            | ProductKind::Future { underlying, .. }
+            | ProductKind::Option { underlying, .. } => {
+                underlying.map(|p| f(p));
+            }
+            ProductKind::FutureSpread { same_side_leg, opp_side_leg } => {
+                same_side_leg.map(|p| f(p));
+                opp_side_leg.map(|p| f(p));
+            }
+        }
+    }
 }
 
 impl Symbolic for ProductInner {
@@ -63,14 +91,8 @@ impl Symbolic for ProductInner {
     }
 }
 
-impl From<&ProductInner> for api::symbology::Product {
-    fn from(p: &ProductInner) -> api::symbology::Product {
-        api::symbology::Product { id: p.id, name: p.name, kind: (&p.kind).into() }
-    }
-}
-
 /// Derivation of `api::symbology::ProductKind` where ids are replaced with StaticRef's.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProductKind {
     Coin {
         token_info: BTreeMap<VenueRef, TokenInfo>,
@@ -120,28 +142,17 @@ impl ProductKind {
         }
     }
 
-    pub fn iter_dependents(&self, mut f: impl FnMut(&ProductRef)) {
-        match self {
-            ProductKind::Coin { .. }
-            | ProductKind::Fiat
-            | ProductKind::Equity
-            | ProductKind::Index
-            | ProductKind::Commodity
-            | ProductKind::Unknown => {}
-            ProductKind::Perpetual { underlying, .. }
-            | ProductKind::Future { underlying, .. }
-            | ProductKind::Option { underlying, .. } => {
-                underlying.map(|p| f(&p));
-            }
-            ProductKind::FutureSpread { same_side_leg, opp_side_leg } => {
-                same_side_leg.map(|p| f(&p));
-                opp_side_leg.map(|p| f(&p));
-            }
-        }
-    }
-
     pub fn is_option(&self) -> bool {
         matches!(self, ProductKind::Option { .. })
+    }
+
+    pub fn underlying(&self) -> Option<ProductRef> {
+        match self {
+            ProductKind::Perpetual { underlying, .. }
+            | ProductKind::Future { underlying, .. }
+            | ProductKind::Option { underlying, .. } => *underlying,
+            _ => None,
+        }
     }
 
     pub fn multiplier(&self) -> Decimal {

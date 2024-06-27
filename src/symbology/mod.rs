@@ -23,6 +23,3 @@ pub use venue::VenueRef;
 
 pub static GLOBAL_INDEX: Lazy<ArcSwap<MarketIndex>> =
     Lazy::new(|| ArcSwap::from_pointee(MarketIndex::new()));
-
-// CR alee: TryFrom/Into api types for Product and Market could be optimized
-// to avoid unnecessary clone; make the Inner types Copy
