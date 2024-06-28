@@ -7,6 +7,8 @@ use api::{
 use chrono::{DateTime, Utc};
 use netidx::subscriber::{FromValue, Value};
 use netidx_protocols::{call_rpc, rpc::client::Proc};
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 
 pub const USD_EQUIVALENTS: [&'static str; 8] = [
     "USD",
@@ -19,7 +21,13 @@ pub const USD_EQUIVALENTS: [&'static str; 8] = [
     "FDUSD Crypto",
 ];
 
-pub const USD_QUOTE_CURRENCIES: [&'static str; 3] = ["USD", "USDT Crypto", "USDC Crypto"];
+pub const USD_QUOTE_CURRENCIES: [(&'static str, Decimal); 4] = [
+    ("USD", dec!(1)),
+    ("USDT Crypto", dec!(1)),
+    ("USDC Crypto", dec!(1)),
+    ("USDcent", dec!(100)),
+];
+
 pub const ROUTES: [&'static str; 2] = ["DIRECT", "DATABENTO"];
 
 pub async fn get_market_snapshot(
