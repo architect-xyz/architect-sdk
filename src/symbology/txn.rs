@@ -78,13 +78,13 @@ impl Txn {
         let market_ref_count = (*MARKET_REF_COUNT).load(Ordering::SeqCst);
         let product_refs_allocated = product_ref_count - *product_ref_count_at_begin;
         let market_refs_allocated = market_ref_count - *market_ref_count_at_begin;
-        if product_refs_allocated >= 2 * *num_products_added {
+        if *num_products_added > 10 && product_refs_allocated >= 2 * *num_products_added {
             warn!(
                 "large symbology update cascade: allocated {} product refs for {} products",
                 product_refs_allocated, num_products_added
             );
         }
-        if market_refs_allocated >= 2 * *num_markets_added {
+        if *num_markets_added > 10 && market_refs_allocated >= 2 * *num_markets_added {
             warn!(
                 "large symbology update cascade: allocated {} market refs for {} markets",
                 market_refs_allocated, num_markets_added
