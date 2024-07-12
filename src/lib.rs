@@ -9,6 +9,7 @@ pub mod orderflow;
 pub mod paths;
 pub mod symbology;
 pub mod synced;
+pub mod tls;
 
 pub use channel_driver::{ChannelDriver, ChannelDriverBuilder};
 pub use common::Common;
