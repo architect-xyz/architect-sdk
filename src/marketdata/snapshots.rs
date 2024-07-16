@@ -25,7 +25,7 @@ pub const USD_QUOTE_CURRENCIES: [(&'static str, Decimal); 4] = [
     ("USD", dec!(1)),
     ("USDT Crypto", dec!(1)),
     ("USDC Crypto", dec!(1)),
-    ("USDcent", dec!(100)),
+    ("USDcent", dec!(0.01)),
 ];
 
 pub const ROUTES: [&'static str; 2] = ["DIRECT", "DATABENTO"];
