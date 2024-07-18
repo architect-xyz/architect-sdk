@@ -4,7 +4,7 @@
 use crate::Common;
 use anyhow::{anyhow, bail, Result};
 use api::{
-    system_control::SystemControlMessage, utils::messaging::MaybeRequest, Address,
+    channel_control::ChannelControlMessage, utils::messaging::MaybeRequest, Address,
     ComponentId, Envelope, MaybeSplit, MessageTopic, Stamp, TypedMessage, UserId,
 };
 use enumflags2::BitFlags;
@@ -190,7 +190,7 @@ impl ChannelDriver {
                     error!("channel driver send error, dropping: {}", e);
                 }
             }
-            if closed {
+            if closed || conn.is_dead() {
                 break Ok(());
             }
         }
@@ -279,9 +279,10 @@ impl ChannelDriver {
     ) -> Result<()> {
         self.with_channel(|conn, src| {
             if let Address::Channel(uid, chan) = src {
-                conn.send_one(&Envelope::system_control(TypedMessage::SystemControl(
-                    SystemControlMessage::ChannelSubscribe(uid, chan, topics),
-                )))
+                conn.send_one(&Envelope::system_control(TypedMessage::ChannelControl(
+                    ChannelControlMessage::ChannelSubscribe(uid, chan, topics),
+                )))?;
+                Ok(())
             } else {
                 bail!("channel not a user channel")
             }
