@@ -283,6 +283,7 @@ impl ChannelDriver {
                     ChannelControlMessage::ChannelSubscribe(uid, chan, topics),
                 ));
                 env.src = src;
+                env.stamp = Stamp::new(Some(uid), Default::default());
                 conn.send_one(&env)?;
                 Ok(())
             } else {
