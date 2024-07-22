@@ -29,8 +29,8 @@ impl Paths {
     }
 
     /// Marketdata feeds
-    pub fn marketdata(&self, cpty: Cpty, hist: bool) -> Path {
-        let use_local = self.use_local_marketdata.contains(&cpty.id());
+    pub fn marketdata(&self, cpty: Cpty, hist: bool, force_local: bool) -> Path {
+        let use_local = force_local || self.use_local_marketdata.contains(&cpty.id());
         let use_legacy = self.use_legacy_marketdata.contains(&cpty.id())
             || (hist && self.use_legacy_hist_marketdata.contains(&cpty.id()));
         let base = if use_local { &self.local_base } else { &self.hosted_base };
@@ -43,7 +43,7 @@ impl Paths {
 
     /// Realtime marketdata feed
     pub fn marketdata_rt(&self, cpty: Cpty) -> Path {
-        self.marketdata(cpty, false)
+        self.marketdata(cpty, false, false)
             .append("rt")
             .append(&cpty.venue.name)
             .append(&cpty.route.name)
@@ -53,7 +53,7 @@ impl Paths {
     pub fn marketdata_rt_by_id(&self, market: MarketRef) -> Path {
         let cpty = market.cpty();
         if self.use_legacy_marketdata.contains(&cpty.id()) {
-            self.marketdata(cpty, false)
+            self.marketdata(cpty, false, false)
                 .append("rt")
                 .append("by-id")
                 .append(&market.id.to_string())
@@ -68,7 +68,7 @@ impl Paths {
         if self.use_legacy_marketdata.contains(&cpty.id()) {
             match market.kind {
                 MarketKind::Exchange(ExchangeMarketKind { base, quote }) => self
-                    .marketdata(cpty, false)
+                    .marketdata(cpty, false, false)
                     .append("rt")
                     .append("by-name")
                     .append(&market.venue.name)
@@ -84,9 +84,17 @@ impl Paths {
         }
     }
 
+    /// Delayed marketdata feed
+    pub fn marketdata_delayed(&self, cpty: Cpty, force_local: bool) -> Path {
+        self.marketdata(cpty, false, force_local)
+            .append("delayed")
+            .append(&cpty.venue.name)
+            .append(&cpty.route.name)
+    }
+
     /// Realtime marketdata candles base
     pub fn marketdata_ohlc(&self, cpty: Cpty) -> Path {
-        self.marketdata(cpty, false)
+        self.marketdata(cpty, false, false)
             .append("ohlc")
             .append(&cpty.venue.name)
             .append(&cpty.route.name)
@@ -101,7 +109,7 @@ impl Paths {
         {
             match market.kind {
                 MarketKind::Exchange(ExchangeMarketKind { base, quote }) => self
-                    .marketdata(cpty, hist)
+                    .marketdata(cpty, hist, false)
                     .append("ohlc")
                     .append("by-name")
                     .append(&market.venue.name)
@@ -123,14 +131,14 @@ impl Paths {
         if self.use_legacy_marketdata.contains(&cpty.id())
             || self.use_legacy_hist_marketdata.contains(&cpty.id())
         {
-            self.marketdata(cpty, true)
+            self.marketdata(cpty, true, false)
                 .append("hist")
                 .append("ohlc")
                 .append("by-name")
                 .append(&cpty.venue.name)
                 .append(&cpty.route.name)
         } else {
-            self.marketdata(cpty, true)
+            self.marketdata(cpty, true, false)
                 .append("hist")
                 .append("ohlc")
                 .append(&cpty.venue.name)
@@ -140,7 +148,7 @@ impl Paths {
 
     /// Marketdata APIs (RPCs)
     pub fn marketdata_api(&self, cpty: Cpty) -> Path {
-        self.marketdata(cpty, false)
+        self.marketdata(cpty, false, false)
             .append("api")
             .append(&cpty.venue.name)
             .append(&cpty.route.name)
@@ -154,7 +162,7 @@ impl Paths {
 
     /// RFQ feeds
     pub fn marketdata_rfq(&self, cpty: Cpty) -> Path {
-        self.marketdata(cpty, false)
+        self.marketdata(cpty, false, false)
             .append("rfq")
             .append(&cpty.venue.name)
             .append(&cpty.route.name)
