@@ -92,17 +92,31 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
-    /// Realtime marketdata candles base
-    pub fn marketdata_ohlc(&self, cpty: Cpty) -> Path {
-        self.marketdata(cpty, false, false)
-            .append("ohlc")
+    /// Marketdata candles base
+    pub fn marketdata_ohlc(
+        &self,
+        cpty: Cpty,
+        force_local: bool,
+        delayed: Option<bool>,
+    ) -> Path {
+        let ohlc_path: &str = match delayed {
+            None | Some(false) => "ohlc",
+            Some(true) => "delayed-ohlc",
+        };
+        self.marketdata(cpty, false, force_local)
+            .append(ohlc_path)
             .append(&cpty.venue.name)
             .append(&cpty.route.name)
     }
 
     /// Realtime marketdata candles, aliased by-name
     /// If hist is true, pull the name as if we were querying historical data
-    pub fn marketdata_ohlc_by_name(&self, market: MarketRef, hist: bool) -> Path {
+    pub fn marketdata_ohlc_by_name(
+        &self,
+        market: MarketRef,
+        hist: bool,
+        delayed: Option<bool>,
+    ) -> Path {
         let cpty = market.cpty();
         if self.use_legacy_marketdata.contains(&cpty.id())
             || (hist && self.use_legacy_hist_marketdata.contains(&cpty.id()))
@@ -121,7 +135,7 @@ impl Paths {
                 }
             }
         } else {
-            let base = self.marketdata_ohlc(cpty);
+            let base = self.marketdata_ohlc(cpty, false, delayed);
             market.path_by_name(&base)
         }
     }
