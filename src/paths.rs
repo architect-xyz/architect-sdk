@@ -92,6 +92,57 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
+    /// Delayed marketdata feed for a specific market, referenced by-id
+    pub fn marketdata_delayed_by_id(&self, market: MarketRef, force_local: bool) -> Path {
+        let cpty = market.cpty();
+        if self.use_legacy_marketdata.contains(&cpty.id()) {
+            self.marketdata(cpty, false, false)
+                .append("delayed")
+                .append("by-id")
+                .append(&market.id.to_string())
+        } else {
+            market.path_by_id(&self.marketdata_delayed(cpty, force_local))
+        }
+    }
+
+    /// Delayed marketdata feed for a specific market, aliased by-name
+    pub fn marketdata_delayed_by_name(
+        &self,
+        market: MarketRef,
+        force_local: bool,
+    ) -> Path {
+        let cpty = market.cpty();
+        if self.use_legacy_marketdata.contains(&cpty.id()) {
+            match market.kind {
+                MarketKind::Exchange(ExchangeMarketKind { base, quote }) => self
+                    .marketdata(cpty, false, false)
+                    .append("delayed")
+                    .append("by-name")
+                    .append(&market.venue.name)
+                    .append(&market.route.name)
+                    .append(base.name.as_str())
+                    .append(quote.name.as_str()),
+                _ => {
+                    panic!("legacy_marketdata_paths only supported for Exchange markets");
+                }
+            }
+        } else {
+            market.path_by_name(&self.marketdata_delayed(cpty, force_local))
+        }
+    }
+
+    pub fn marketdata_by_name(
+        &self,
+        market: MarketRef,
+        force_local: bool,
+        delayed: Option<bool>,
+    ) -> Path {
+        match delayed {
+            Some(true) => self.marketdata_delayed_by_name(market, force_local),
+            Some(false) | None => self.marketdata_rt_by_name(market),
+        }
+    }
+
     /// Marketdata candles base
     pub fn marketdata_ohlc(
         &self,
@@ -109,7 +160,7 @@ impl Paths {
             .append(&cpty.route.name)
     }
 
-    /// Realtime marketdata candles, aliased by-name
+    /// marketdata candles, aliased by-name
     /// If hist is true, pull the name as if we were querying historical data
     pub fn marketdata_ohlc_by_name(
         &self,

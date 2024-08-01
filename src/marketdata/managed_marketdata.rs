@@ -193,6 +193,7 @@ impl ManagedMarketdata {
     pub async fn subscribe(
         &self,
         market: MarketRef,
+        delayed: Option<bool>,
     ) -> (Arc<Mutex<BookClient>>, Synced<u64>) {
         let mut book_handles = self.book_handles.lock().await;
         if let Some(existing) =
@@ -201,7 +202,8 @@ impl ManagedMarketdata {
             let synced = existing.lock().await.subscribe_updates();
             return (existing, synced);
         }
-        let book_path = self.common.paths.marketdata_rt_by_name(market).append("book");
+        let book_path =
+            self.common.paths.marketdata_by_name(market, false, delayed).append("book");
         debug!("subscribing to book at {}", book_path);
         let book_client = BookClient::new(
             &self.common.subscriber,
@@ -222,9 +224,13 @@ impl ManagedMarketdata {
         &self,
         market: MarketRef,
         path_leaf: String,
+        delayed: Option<bool>,
     ) -> Result<(Arc<Mutex<DvalHandle>>, Synced<u64>)> {
-        let path =
-            self.common.paths.marketdata_rt_by_name(market).append(path_leaf.as_str());
+        let path = self
+            .common
+            .paths
+            .marketdata_by_name(market, false, delayed)
+            .append(path_leaf.as_str());
         let (handle, synced) = {
             let mut dval_handles = self.dval_handles.lock().await;
             if let Some(existing) = dval_handles
