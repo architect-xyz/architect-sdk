@@ -8,11 +8,11 @@ homepage = "https://www.architect.xyz"
 keywords = ["crypto", "hft", "trading", "finance"]
 license = "AGPL-3.0-only"
 name = "architect-sdk"
-version = "0.5.21"
+version = "0.5.22"
 
 [dependencies]
 anyhow = { workspace = true }
-api = { package = "architect-api", version = "0.5.21", path = "../api", features = ["netidx"] }
+api = { package = "architect-api", version = "0.5.22", path = "../api", features = ["netidx"] }
 arc-swap = { workspace = true }
 arcstr = { workspace = true }
 async-stream = { workspace = true }
