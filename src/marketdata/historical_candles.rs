@@ -35,7 +35,7 @@ pub async fn get(
             }
         }
     }
-    let live_base = common.paths.marketdata_ohlc_by_name(market, true, None);
+    let live_base = common.paths.marketdata_ohlc_by_name(market, true, false);
     debug!(
         "requesting historical {} candles for {}: from {} to {} via {}",
         width.as_str(),

@@ -193,7 +193,7 @@ impl ManagedMarketdata {
     pub async fn subscribe(
         &self,
         market: MarketRef,
-        delayed: Option<bool>,
+        delayed: bool,
     ) -> (Arc<Mutex<BookClient>>, Synced<u64>) {
         let mut book_handles = self.book_handles.lock().await;
         if let Some(existing) =
@@ -224,7 +224,7 @@ impl ManagedMarketdata {
         &self,
         market: MarketRef,
         path_leaf: String,
-        delayed: Option<bool>,
+        delayed: bool,
     ) -> Result<(Arc<Mutex<DvalHandle>>, Synced<u64>)> {
         let path = self
             .common
