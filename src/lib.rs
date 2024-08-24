@@ -2,6 +2,7 @@ pub mod account_manager;
 pub mod admin_stats;
 pub mod channel_driver;
 pub mod common;
+pub mod external_driver;
 pub mod marketdata;
 pub mod oms;
 pub mod order_id_allocator;

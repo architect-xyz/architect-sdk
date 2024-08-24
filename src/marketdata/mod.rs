@@ -1,4 +1,5 @@
 pub mod book_client;
+pub mod external_client;
 pub mod historical_candles;
 pub mod managed_marketdata;
 pub mod netidx_feed_client;

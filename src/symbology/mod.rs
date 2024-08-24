@@ -4,6 +4,7 @@ use once_cell::sync::Lazy;
 pub(self) mod allocator;
 pub mod client;
 pub mod cpty;
+pub mod external_client;
 pub mod index;
 pub mod market;
 pub mod product;

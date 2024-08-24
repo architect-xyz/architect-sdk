@@ -11,7 +11,8 @@ use netidx::{
 };
 use once_cell::sync::OnceCell;
 use std::{fs, ops::Deref, path::PathBuf, str::FromStr, sync::Arc};
-use tokio::task;
+use tokio::{sync::Mutex, task};
+use url::Url;
 
 /// Common data and functionality shared by most everything in the core,
 /// derived from the config.  
@@ -89,6 +90,10 @@ impl Common {
         for cpty in f.use_legacy_hist_marketdata {
             use_legacy_hist_marketdata.insert(CptyId::from_str(&cpty)?);
         }
+        let mut external_marketdata = FxHashMap::default();
+        for (cpty, url) in f.external_marketdata.iter() {
+            external_marketdata.insert(CptyId::from_str(&cpty)?, Url::parse(url)?);
+        }
         let identity = tls::netidx_tls_identity(&netidx_config)
             .map(|(_, identity)| {
                 let cert = tls::netidx_tls_identity_certificate(identity)?;
@@ -123,6 +128,8 @@ impl Common {
                 use_legacy_hist_marketdata,
             },
             stats: OnceCell::new(),
+            external_symbology: Mutex::new(FxHashMap::default()),
+            external_marketdata,
         })))
     }
 
@@ -217,14 +224,33 @@ impl Common {
     }
 
     /// Convenience function to initialize symbology from [Common]
-    pub async fn start_symbology(&self, write: bool) -> crate::symbology::client::Client {
-        crate::symbology::client::Client::start(
+    pub async fn start_symbology(
+        &self,
+        write: bool,
+    ) -> Option<crate::symbology::client::Client> {
+        if self.config.no_symbology {
+            return None;
+        }
+        let client = crate::symbology::client::Client::start(
             self.subscriber.clone(),
             self.paths.sym(),
             None,
             write,
         )
-        .await
+        .await;
+        Some(client)
+    }
+
+    pub async fn start_external_symbology(&self) -> Result<()> {
+        let mut external_symbology = self.external_symbology.lock().await;
+        for (cpty, url) in self.config.external_marketdata.iter() {
+            let cpty: CptyId = cpty.parse()?;
+            let url: Url = url.parse()?;
+            let client = crate::symbology::external_client::ExternalClient::start(url);
+            client.synced().wait_synced(None).await?;
+            external_symbology.insert(cpty, client);
+        }
+        Ok(())
     }
 
     pub fn channel_driver(&self) -> ChannelDriverBuilder {
@@ -258,4 +284,9 @@ pub struct CommonInner {
     pub paths: Paths,
     /// Optional admin_stats support
     pub stats: OnceCell<AdminStats>,
+    /// External symbology subscriptions
+    pub external_symbology:
+        Mutex<FxHashMap<CptyId, crate::symbology::external_client::ExternalClient>>,
+    /// External marketdata source config
+    pub external_marketdata: FxHashMap<CptyId, Url>,
 }

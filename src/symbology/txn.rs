@@ -415,6 +415,16 @@ impl Txn {
             }
             L::Commodity => ProductKind::Commodity,
             L::Index => ProductKind::Index,
+            L::EventGroup { event_group } => ProductKind::EventGroup {
+                event_group: event_group
+                    .map(|p| self.find_product_by_id(&p))
+                    .transpose()?,
+            },
+            L::EventContract { event_group } => ProductKind::EventContract {
+                event_group: event_group
+                    .map(|p| self.find_product_by_id(&p))
+                    .transpose()?,
+            },
             L::Unknown => ProductKind::Unknown,
         })
     }

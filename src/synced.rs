@@ -56,3 +56,9 @@ impl Synced<u64> {
         self.wait_synced_with(timeout, |v| *v > 0).await
     }
 }
+
+impl<T> Synced<Option<T>> {
+    pub async fn wait_synced(&mut self, timeout: Option<Duration>) -> Result<()> {
+        self.wait_synced_with(timeout, |v| v.is_some()).await
+    }
+}

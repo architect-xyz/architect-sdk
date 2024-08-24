@@ -62,6 +62,10 @@ impl ProductInner {
                 same_side_leg.map(|p| f(p));
                 opp_side_leg.map(|p| f(p));
             }
+            ProductKind::EventGroup { event_group }
+            | ProductKind::EventContract { event_group } => {
+                event_group.map(|p| f(p));
+            }
         }
     }
 }
@@ -113,6 +117,12 @@ pub enum ProductKind {
     },
     Index,
     Commodity,
+    EventGroup {
+        event_group: Option<ProductRef>,
+    },
+    EventContract {
+        event_group: Option<ProductRef>,
+    },
     Unknown,
 }
 
@@ -129,6 +139,8 @@ impl ProductKind {
             ProductKind::Option { .. } => "Option",
             ProductKind::Index => "Index",
             ProductKind::Commodity => "Commodity",
+            ProductKind::EventGroup { .. } => "EventGroup",
+            ProductKind::EventContract { .. } => "EventContract",
             ProductKind::Unknown => "Unknown",
         }
     }
@@ -159,6 +171,8 @@ impl ProductKind {
             | ProductKind::Equity
             | ProductKind::Index
             | ProductKind::Commodity
+            | ProductKind::EventGroup { .. }
+            | ProductKind::EventContract { .. }
             | ProductKind::Unknown => None,
         };
         multiplier.unwrap_or(dec!(1))
@@ -192,6 +206,8 @@ impl ProductKind {
             | ProductKind::Equity
             | ProductKind::Index
             | ProductKind::Commodity
+            | ProductKind::EventGroup { .. }
+            | ProductKind::EventContract { .. }
             | ProductKind::Unknown => None,
         };
         instrument_type
@@ -330,6 +346,16 @@ impl From<&ProductKind> for api::symbology::ProductKind {
             },
             ProductKind::Index => api::symbology::ProductKind::Index,
             ProductKind::Commodity => api::symbology::ProductKind::Commodity,
+            ProductKind::EventGroup { event_group } => {
+                api::symbology::ProductKind::EventGroup {
+                    event_group: event_group.map(|p| p.id),
+                }
+            }
+            ProductKind::EventContract { event_group } => {
+                api::symbology::ProductKind::EventContract {
+                    event_group: event_group.map(|p| p.id),
+                }
+            }
             ProductKind::Unknown => api::symbology::ProductKind::Unknown,
         }
     }
