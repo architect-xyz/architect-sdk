@@ -50,7 +50,6 @@ serde_yaml = { workspace = true }
 smallvec = { workspace = true }
 sysinfo = { workspace = true }
 time = { workspace = true }
-thingbuf = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
 url = { workspace = true }
