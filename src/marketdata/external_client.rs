@@ -28,11 +28,11 @@ impl ExternalBookClient {
     pub async fn poll_snapshot(&mut self) -> Result<()> {
         self.driver
             .send_query(
-                "marketdata/book/snapshot",
-                Some(QueryBookSnapshot { market_id: self.market.id }),
+                "marketdata/book/l2/snapshot",
+                Some(QueryL2BookSnapshot { market_id: self.market.id }),
             )
             .await?;
-        let res: BookSnapshot = self.driver.next_response().await?;
+        let res: L2BookSnapshot = self.driver.next_response().await?;
         self.book.clear();
         self.book.timestamp = res.timestamp;
         for (px, sz) in res.bids {

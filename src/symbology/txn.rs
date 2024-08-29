@@ -415,16 +415,35 @@ impl Txn {
             }
             L::Commodity => ProductKind::Commodity,
             L::Index => ProductKind::Index,
-            L::EventGroup { event_group } => ProductKind::EventGroup {
-                event_group: event_group
-                    .map(|p| self.find_product_by_id(&p))
-                    .transpose()?,
+            L::EventGroup { event_contract_groups } => ProductKind::EventGroup {
+                event_contract_groups: event_contract_groups
+                    .iter()
+                    .map(|p| {
+                        let p = self.find_product_by_id(&p)?;
+                        Ok(p)
+                    })
+                    .collect::<Result<_>>()?,
             },
-            L::EventContract { event_group } => ProductKind::EventContract {
-                event_group: event_group
-                    .map(|p| self.find_product_by_id(&p))
-                    .transpose()?,
+            L::EventContractGroup(ecgk) => match ecgk {
+                api::symbology::EventContractGroupKind::Single { yes, yes_alias } => {
+                    ProductKind::EventContractGroup(EventContractGroupKind::Single {
+                        yes: self.find_product_by_id(&yes)?,
+                        yes_alias: yes_alias.clone(),
+                    })
+                }
+                api::symbology::EventContractGroupKind::Dual {
+                    yes,
+                    yes_alias,
+                    no,
+                    no_alias,
+                } => ProductKind::EventContractGroup(EventContractGroupKind::Dual {
+                    yes: self.find_product_by_id(&yes)?,
+                    yes_alias: yes_alias.clone(),
+                    no: self.find_product_by_id(&no)?,
+                    no_alias: no_alias.clone(),
+                }),
             },
+            L::EventContract => ProductKind::EventContract,
             L::Unknown => ProductKind::Unknown,
         })
     }

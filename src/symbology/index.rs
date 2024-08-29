@@ -136,7 +136,8 @@ impl MarketIndex {
                     | ProductKind::Index
                     | ProductKind::Commodity
                     | ProductKind::EventGroup { .. }
-                    | ProductKind::EventContract { .. }
+                    | ProductKind::EventContractGroup(..)
+                    | ProductKind::EventContract
                     | ProductKind::Unknown => (),
                 }
             }
@@ -223,7 +224,8 @@ impl MarketIndex {
                     | ProductKind::Index
                     | ProductKind::Commodity
                     | ProductKind::EventGroup { .. }
-                    | ProductKind::EventContract { .. }
+                    | ProductKind::EventContractGroup(..)
+                    | ProductKind::EventContract
                     | ProductKind::Unknown => (),
                 }
             }
