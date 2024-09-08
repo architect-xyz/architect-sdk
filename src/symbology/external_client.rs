@@ -50,7 +50,7 @@ impl ExternalClient {
     }
 
     async fn run(url: Url, sync_handle: SyncHandle<Option<DateTime<Utc>>>) -> Result<()> {
-        let driver = ExternalDriver::connect(url).await?;
+        let driver = ExternalDriver::new(url);
         let snap: SymbologySnapshot =
             driver.query("symbology/snapshot", None::<()>).await?;
         let mut txn = Txn::begin();

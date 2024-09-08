@@ -45,7 +45,7 @@ impl Drop for ExternalDriver {
 }
 
 impl ExternalDriver {
-    pub async fn connect(url: Url) -> Result<Self> {
+    pub fn new(url: Url) -> Self {
         let (ws_write, mut to_write) = mpsc::channel(1000);
         let requests = Arc::new(Mutex::new(FxHashMap::default()));
         let subscriptions = Arc::new(Mutex::new(FxHashMap::default()));
@@ -65,7 +65,7 @@ impl ExternalDriver {
                 }
             })
         };
-        Ok(Self { ids: AtomicU64::new(0), ws_task, ws_write, requests, subscriptions })
+        Self { ids: AtomicU64::new(0), ws_task, ws_write, requests, subscriptions }
     }
 
     async fn run(

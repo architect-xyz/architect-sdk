@@ -7,20 +7,18 @@ use crate::{
 use anyhow::Result;
 use api::{external::marketdata::*, marketdata::TradeV1};
 use futures::Stream;
-use std::pin::Pin;
-use url::Url;
+use std::{pin::Pin, sync::Arc};
 
 #[derive(Debug)]
 pub struct ExternalMarketdataClient {
-    driver: ExternalDriver,
+    driver: Arc<ExternalDriver>,
     market: MarketRef,
     book: LevelBook,
 }
 
 impl ExternalMarketdataClient {
-    pub async fn new(url: Url, market: MarketRef) -> Result<Self> {
-        let driver = ExternalDriver::connect(url).await?;
-        Ok(Self { driver, market, book: LevelBook::default() })
+    pub fn new(driver: Arc<ExternalDriver>, market: MarketRef) -> Self {
+        Self { driver, market, book: LevelBook::default() }
     }
 
     pub async fn subscribe_trades(
