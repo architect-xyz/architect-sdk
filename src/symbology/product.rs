@@ -62,19 +62,21 @@ impl ProductInner {
                 same_side_leg.map(|p| f(p));
                 opp_side_leg.map(|p| f(p));
             }
-            ProductKind::EventGroup { event_contract_groups } => {
-                for p in event_contract_groups.iter() {
+            ProductKind::EventSeries => {}
+            ProductKind::Event { series, outcomes, .. } => {
+                series.map(|p| f(p));
+                for p in outcomes.iter() {
                     f(*p);
                 }
             }
-            ProductKind::EventContractGroup(i) => match i {
-                EventContractGroupKind::Single { yes, .. } => f(*yes),
-                EventContractGroupKind::Dual { yes, no, .. } => {
+            ProductKind::EventOutcome { contracts, .. } => match contracts {
+                EventContracts::Single { yes, .. } => f(*yes),
+                EventContracts::Dual { yes, no, .. } => {
                     f(*yes);
                     f(*no);
                 }
             },
-            ProductKind::EventContract => {}
+            ProductKind::EventContract { .. } => {}
         }
     }
 }
@@ -126,16 +128,25 @@ pub enum ProductKind {
     },
     Index,
     Commodity,
-    EventGroup {
-        event_contract_groups: Vec<ProductRef>,
+    EventSeries,
+    Event {
+        series: Option<ProductRef>,
+        outcomes: Vec<ProductRef>,
+        mutually_exclusive: Option<bool>,
+        expiration: Option<DateTime<Utc>>,
     },
-    EventContractGroup(EventContractGroupKind),
-    EventContract,
+    EventOutcome {
+        display_order: Option<u32>,
+        contracts: EventContracts,
+    },
+    EventContract {
+        expiration: Option<DateTime<Utc>>,
+    },
     Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub enum EventContractGroupKind {
+pub enum EventContracts {
     Single {
         yes: ProductRef,
         yes_alias: Option<Str>,
@@ -161,8 +172,9 @@ impl ProductKind {
             ProductKind::Option { .. } => "Option",
             ProductKind::Index => "Index",
             ProductKind::Commodity => "Commodity",
-            ProductKind::EventGroup { .. } => "EventGroup",
-            ProductKind::EventContractGroup(..) => "EventContractGroup",
+            ProductKind::EventSeries => "EventSeries",
+            ProductKind::Event { .. } => "EventGroup",
+            ProductKind::EventOutcome { .. } => "EventOutcome",
             ProductKind::EventContract { .. } => "EventContract",
             ProductKind::Unknown => "Unknown",
         }
@@ -194,9 +206,10 @@ impl ProductKind {
             | ProductKind::Equity
             | ProductKind::Index
             | ProductKind::Commodity
-            | ProductKind::EventGroup { .. }
-            | ProductKind::EventContractGroup(..)
-            | ProductKind::EventContract
+            | ProductKind::EventSeries
+            | ProductKind::Event { .. }
+            | ProductKind::EventOutcome { .. }
+            | ProductKind::EventContract { .. }
             | ProductKind::Unknown => None,
         };
         multiplier.unwrap_or(dec!(1))
@@ -214,6 +227,8 @@ impl ProductKind {
                     opp_side_leg.and_then(|p| p.kind.expiration()),
                 )
             }
+            ProductKind::Event { expiration, .. } => *expiration,
+            ProductKind::EventContract { expiration } => *expiration,
             _ => None,
         }
     }
@@ -230,9 +245,10 @@ impl ProductKind {
             | ProductKind::Equity
             | ProductKind::Index
             | ProductKind::Commodity
-            | ProductKind::EventGroup { .. }
-            | ProductKind::EventContractGroup(..)
-            | ProductKind::EventContract
+            | ProductKind::EventSeries
+            | ProductKind::Event { .. }
+            | ProductKind::EventOutcome { .. }
+            | ProductKind::EventContract { .. }
             | ProductKind::Unknown => None,
         };
         instrument_type
@@ -371,33 +387,39 @@ impl From<&ProductKind> for api::symbology::ProductKind {
             },
             ProductKind::Index => api::symbology::ProductKind::Index,
             ProductKind::Commodity => api::symbology::ProductKind::Commodity,
-            ProductKind::EventGroup { event_contract_groups } => {
-                api::symbology::ProductKind::EventGroup {
-                    event_contract_groups: event_contract_groups
-                        .iter()
-                        .map(|p| p.id)
-                        .collect(),
+            ProductKind::EventSeries => api::symbology::ProductKind::EventSeries,
+            ProductKind::Event { series, outcomes, mutually_exclusive, expiration } => {
+                api::symbology::ProductKind::Event {
+                    series: series.map(|s| s.id),
+                    outcomes: outcomes.iter().map(|p| p.id).collect(),
+                    mutually_exclusive: *mutually_exclusive,
+                    expiration: *expiration,
                 }
             }
-            ProductKind::EventContractGroup(kind) => {
-                api::symbology::ProductKind::EventContractGroup(match kind {
-                    EventContractGroupKind::Single { yes, yes_alias } => {
-                        api::symbology::EventContractGroupKind::Single {
-                            yes: yes.id,
-                            yes_alias: yes_alias.clone(),
+            ProductKind::EventOutcome { display_order, contracts } => {
+                api::symbology::ProductKind::EventOutcome {
+                    display_order: *display_order,
+                    contracts: match contracts {
+                        EventContracts::Single { yes, yes_alias } => {
+                            api::symbology::EventContracts::Single {
+                                yes: yes.id,
+                                yes_alias: yes_alias.clone(),
+                            }
                         }
-                    }
-                    EventContractGroupKind::Dual { yes, yes_alias, no, no_alias } => {
-                        api::symbology::EventContractGroupKind::Dual {
-                            yes: yes.id,
-                            yes_alias: yes_alias.clone(),
-                            no: no.id,
-                            no_alias: no_alias.clone(),
+                        EventContracts::Dual { yes, yes_alias, no, no_alias } => {
+                            api::symbology::EventContracts::Dual {
+                                yes: yes.id,
+                                yes_alias: yes_alias.clone(),
+                                no: no.id,
+                                no_alias: no_alias.clone(),
+                            }
                         }
-                    }
-                })
+                    },
+                }
             }
-            ProductKind::EventContract => api::symbology::ProductKind::EventContract,
+            ProductKind::EventContract { expiration } => {
+                api::symbology::ProductKind::EventContract { expiration: *expiration }
+            }
             ProductKind::Unknown => api::symbology::ProductKind::Unknown,
         }
     }
