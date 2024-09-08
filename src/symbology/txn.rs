@@ -415,35 +415,47 @@ impl Txn {
             }
             L::Commodity => ProductKind::Commodity,
             L::Index => ProductKind::Index,
-            L::EventGroup { event_contract_groups } => ProductKind::EventGroup {
-                event_contract_groups: event_contract_groups
-                    .iter()
-                    .map(|p| {
-                        let p = self.find_product_by_id(&p)?;
-                        Ok(p)
-                    })
-                    .collect::<Result<_>>()?,
-            },
-            L::EventContractGroup(ecgk) => match ecgk {
-                api::symbology::EventContractGroupKind::Single { yes, yes_alias } => {
-                    ProductKind::EventContractGroup(EventContractGroupKind::Single {
+            L::EventSeries => ProductKind::EventSeries,
+            L::Event { series, outcomes, mutually_exclusive, expiration } => {
+                ProductKind::Event {
+                    series: match series {
+                        None => None,
+                        Some(id) => Some(self.find_product_by_id(&id)?),
+                    },
+                    outcomes: outcomes
+                        .iter()
+                        .map(|p| {
+                            let p = self.find_product_by_id(&p)?;
+                            Ok(p)
+                        })
+                        .collect::<Result<_>>()?,
+                    mutually_exclusive,
+                    expiration,
+                }
+            }
+            L::EventOutcome { display_order, contracts } => ProductKind::EventOutcome {
+                display_order,
+                contracts: match contracts {
+                    api::symbology::EventContracts::Single { yes, yes_alias } => {
+                        EventContracts::Single {
+                            yes: self.find_product_by_id(&yes)?,
+                            yes_alias: yes_alias.clone(),
+                        }
+                    }
+                    api::symbology::EventContracts::Dual {
+                        yes,
+                        yes_alias,
+                        no,
+                        no_alias,
+                    } => EventContracts::Dual {
                         yes: self.find_product_by_id(&yes)?,
                         yes_alias: yes_alias.clone(),
-                    })
-                }
-                api::symbology::EventContractGroupKind::Dual {
-                    yes,
-                    yes_alias,
-                    no,
-                    no_alias,
-                } => ProductKind::EventContractGroup(EventContractGroupKind::Dual {
-                    yes: self.find_product_by_id(&yes)?,
-                    yes_alias: yes_alias.clone(),
-                    no: self.find_product_by_id(&no)?,
-                    no_alias: no_alias.clone(),
-                }),
+                        no: self.find_product_by_id(&no)?,
+                        no_alias: no_alias.clone(),
+                    },
+                },
             },
-            L::EventContract => ProductKind::EventContract,
+            L::EventContract { expiration } => ProductKind::EventContract { expiration },
             L::Unknown => ProductKind::Unknown,
         })
     }

@@ -135,9 +135,10 @@ impl MarketIndex {
                     | ProductKind::Equity
                     | ProductKind::Index
                     | ProductKind::Commodity
-                    | ProductKind::EventGroup { .. }
-                    | ProductKind::EventContractGroup(..)
-                    | ProductKind::EventContract
+                    | ProductKind::EventSeries
+                    | ProductKind::Event { .. }
+                    | ProductKind::EventOutcome { .. }
+                    | ProductKind::EventContract { .. }
                     | ProductKind::Unknown => (),
                 }
             }
@@ -223,9 +224,10 @@ impl MarketIndex {
                     | ProductKind::Equity
                     | ProductKind::Index
                     | ProductKind::Commodity
-                    | ProductKind::EventGroup { .. }
-                    | ProductKind::EventContractGroup(..)
-                    | ProductKind::EventContract
+                    | ProductKind::EventSeries
+                    | ProductKind::Event { .. }
+                    | ProductKind::EventOutcome { .. }
+                    | ProductKind::EventContract { .. }
                     | ProductKind::Unknown => (),
                 }
             }
