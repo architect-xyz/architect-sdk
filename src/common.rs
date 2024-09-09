@@ -246,7 +246,8 @@ impl Common {
         for (cpty, url) in self.config.external_marketdata.iter() {
             let cpty: CptyId = cpty.parse()?;
             let url: Url = url.parse()?;
-            let client = crate::symbology::external_client::ExternalClient::start(url);
+            let client =
+                crate::symbology::external_client::ExternalSymbologyClient::start(url);
             client.synced().wait_synced(None).await?;
             external_symbology.insert(cpty, client);
         }
@@ -285,8 +286,9 @@ pub struct CommonInner {
     /// Optional admin_stats support
     pub stats: OnceCell<AdminStats>,
     /// External symbology subscriptions
-    pub external_symbology:
-        Mutex<FxHashMap<CptyId, crate::symbology::external_client::ExternalClient>>,
+    pub external_symbology: Mutex<
+        FxHashMap<CptyId, crate::symbology::external_client::ExternalSymbologyClient>,
+    >,
     /// External marketdata source config
     pub external_marketdata: FxHashMap<CptyId, Url>,
 }

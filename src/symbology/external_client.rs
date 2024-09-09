@@ -15,18 +15,18 @@ use tokio::task;
 use url::Url;
 
 #[derive(Debug)]
-pub struct ExternalClient {
+pub struct ExternalSymbologyClient {
     task: task::JoinHandle<()>,
     sync_handle: SyncHandle<Option<DateTime<Utc>>>,
 }
 
-impl Drop for ExternalClient {
+impl Drop for ExternalSymbologyClient {
     fn drop(&mut self) {
         self.task.abort();
     }
 }
 
-impl ExternalClient {
+impl ExternalSymbologyClient {
     pub fn start(url: Url) -> Self {
         let sync_handle = SyncHandle::new(None);
         let task = {

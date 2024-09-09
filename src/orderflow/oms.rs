@@ -1,6 +1,7 @@
 //! Upgrades the OrderflowClient with some Oms specific functionality.
 
-use crate::{orderflow::OrderflowClient, ChannelDriver, Common};
+use super::OrderflowClient;
+use crate::{AtomicOrderIdAllocator, ChannelDriver, Common};
 use anyhow::Result;
 use api::{oms::*, orderflow::*, ComponentId, MaybeSplit, TypedMessage};
 use chrono::{DateTime, Utc};
@@ -21,21 +22,13 @@ impl OmsClient {
     /// Connect to a component that implements an orderflow interface.  If no target is specified,
     /// search for an "Oms" component in the config.  If no channel authority is specified, search
     /// for a "ChannelAuthority" component in the config.
-    pub async fn connect(
+    pub fn connect(
         common: &Common,
         driver: Arc<ChannelDriver>,
-        order_authority: Option<ComponentId>,
-        default_order_id_allocation: u64,
         target: Option<ComponentId>,
+        order_ids: Option<AtomicOrderIdAllocator>,
     ) -> Result<Self> {
-        let mut orderflow = OrderflowClient::new(
-            &common,
-            driver,
-            order_authority,
-            default_order_id_allocation,
-            target,
-        )?;
-        orderflow.wait_allocated().await?;
+        let orderflow = OrderflowClient::new(&common, driver, target, order_ids)?;
         Ok(Self {
             orderflow,
             last_order_update: FxHashMap::default(),
