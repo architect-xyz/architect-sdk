@@ -159,6 +159,27 @@ pub enum EventContracts {
     },
 }
 
+impl From<EventContracts> for api::symbology::EventContracts {
+    fn from(value: EventContracts) -> api::symbology::EventContracts {
+        match value {
+            EventContracts::Single { yes, yes_alias } => {
+                api::symbology::EventContracts::Single {
+                    yes: api::symbology::ProductId(*yes.clone().0.id),
+                    yes_alias: yes_alias,
+                }
+            }
+            EventContracts::Dual { yes, yes_alias, no, no_alias } => {
+                api::symbology::EventContracts::Dual {
+                    yes: api::symbology::ProductId(*yes.clone().0.id),
+                    yes_alias: yes_alias,
+                    no: api::symbology::ProductId(*no.clone().0.id),
+                    no_alias: no_alias,
+                }
+            }
+        }
+    }
+}
+
 // CR alee: sad reimpl, just use strum or something
 impl ProductKind {
     pub fn name(&self) -> &'static str {
