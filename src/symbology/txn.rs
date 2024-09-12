@@ -415,7 +415,7 @@ impl Txn {
             }
             L::Commodity => ProductKind::Commodity,
             L::Index => ProductKind::Index,
-            L::EventSeries => ProductKind::EventSeries,
+            L::EventSeries { display_name } => ProductKind::EventSeries { display_name },
             L::Event { series, outcomes, mutually_exclusive, expiration } => {
                 ProductKind::Event {
                     series: match series {
@@ -433,28 +433,31 @@ impl Txn {
                     expiration,
                 }
             }
-            L::EventOutcome { display_order, contracts } => ProductKind::EventOutcome {
-                display_order,
-                contracts: match contracts {
-                    api::symbology::EventContracts::Single { yes, yes_alias } => {
-                        EventContracts::Single {
+            L::EventOutcome { display_order, contracts, display_name } => {
+                ProductKind::EventOutcome {
+                    display_order,
+                    contracts: match contracts {
+                        api::symbology::EventContracts::Single { yes, yes_alias } => {
+                            EventContracts::Single {
+                                yes: self.find_product_by_id(&yes)?,
+                                yes_alias: yes_alias.clone(),
+                            }
+                        }
+                        api::symbology::EventContracts::Dual {
+                            yes,
+                            yes_alias,
+                            no,
+                            no_alias,
+                        } => EventContracts::Dual {
                             yes: self.find_product_by_id(&yes)?,
                             yes_alias: yes_alias.clone(),
-                        }
-                    }
-                    api::symbology::EventContracts::Dual {
-                        yes,
-                        yes_alias,
-                        no,
-                        no_alias,
-                    } => EventContracts::Dual {
-                        yes: self.find_product_by_id(&yes)?,
-                        yes_alias: yes_alias.clone(),
-                        no: self.find_product_by_id(&no)?,
-                        no_alias: no_alias.clone(),
+                            no: self.find_product_by_id(&no)?,
+                            no_alias: no_alias.clone(),
+                        },
                     },
-                },
-            },
+                    display_name,
+                }
+            }
             L::EventContract { expiration } => ProductKind::EventContract { expiration },
             L::Unknown => ProductKind::Unknown,
         })

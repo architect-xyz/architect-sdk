@@ -135,7 +135,7 @@ impl MarketIndex {
                     | ProductKind::Equity
                     | ProductKind::Index
                     | ProductKind::Commodity
-                    | ProductKind::EventSeries
+                    | ProductKind::EventSeries { .. }
                     | ProductKind::Event { .. }
                     | ProductKind::EventOutcome { .. }
                     | ProductKind::EventContract { .. }
@@ -224,7 +224,7 @@ impl MarketIndex {
                     | ProductKind::Equity
                     | ProductKind::Index
                     | ProductKind::Commodity
-                    | ProductKind::EventSeries
+                    | ProductKind::EventSeries { .. }
                     | ProductKind::Event { .. }
                     | ProductKind::EventOutcome { .. }
                     | ProductKind::EventContract { .. }

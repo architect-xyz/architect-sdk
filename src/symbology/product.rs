@@ -62,7 +62,7 @@ impl ProductInner {
                 same_side_leg.map(|p| f(p));
                 opp_side_leg.map(|p| f(p));
             }
-            ProductKind::EventSeries => {}
+            ProductKind::EventSeries { .. } => {}
             ProductKind::Event { series, outcomes, .. } => {
                 series.map(|p| f(p));
                 for p in outcomes.iter() {
@@ -128,7 +128,9 @@ pub enum ProductKind {
     },
     Index,
     Commodity,
-    EventSeries,
+    EventSeries {
+        display_name: String,
+    },
     Event {
         series: Option<ProductRef>,
         outcomes: Vec<ProductRef>,
@@ -138,6 +140,7 @@ pub enum ProductKind {
     EventOutcome {
         display_order: Option<u32>,
         contracts: EventContracts,
+        display_name: String,
     },
     EventContract {
         expiration: Option<DateTime<Utc>>,
@@ -193,8 +196,8 @@ impl ProductKind {
             ProductKind::Option { .. } => "Option",
             ProductKind::Index => "Index",
             ProductKind::Commodity => "Commodity",
-            ProductKind::EventSeries => "EventSeries",
-            ProductKind::Event { .. } => "EventGroup",
+            ProductKind::EventSeries { .. } => "EventSeries",
+            ProductKind::Event { .. } => "Event",
             ProductKind::EventOutcome { .. } => "EventOutcome",
             ProductKind::EventContract { .. } => "EventContract",
             ProductKind::Unknown => "Unknown",
@@ -227,7 +230,7 @@ impl ProductKind {
             | ProductKind::Equity
             | ProductKind::Index
             | ProductKind::Commodity
-            | ProductKind::EventSeries
+            | ProductKind::EventSeries { .. }
             | ProductKind::Event { .. }
             | ProductKind::EventOutcome { .. }
             | ProductKind::EventContract { .. }
@@ -266,7 +269,7 @@ impl ProductKind {
             | ProductKind::Equity
             | ProductKind::Index
             | ProductKind::Commodity
-            | ProductKind::EventSeries
+            | ProductKind::EventSeries { .. }
             | ProductKind::Event { .. }
             | ProductKind::EventOutcome { .. }
             | ProductKind::EventContract { .. }
@@ -408,7 +411,11 @@ impl From<&ProductKind> for api::symbology::ProductKind {
             },
             ProductKind::Index => api::symbology::ProductKind::Index,
             ProductKind::Commodity => api::symbology::ProductKind::Commodity,
-            ProductKind::EventSeries => api::symbology::ProductKind::EventSeries,
+            ProductKind::EventSeries { display_name } => {
+                api::symbology::ProductKind::EventSeries {
+                    display_name: display_name.clone(),
+                }
+            }
             ProductKind::Event { series, outcomes, mutually_exclusive, expiration } => {
                 api::symbology::ProductKind::Event {
                     series: series.map(|s| s.id),
@@ -417,7 +424,7 @@ impl From<&ProductKind> for api::symbology::ProductKind {
                     expiration: *expiration,
                 }
             }
-            ProductKind::EventOutcome { display_order, contracts } => {
+            ProductKind::EventOutcome { display_order, contracts, display_name } => {
                 api::symbology::ProductKind::EventOutcome {
                     display_order: *display_order,
                     contracts: match contracts {
@@ -436,6 +443,7 @@ impl From<&ProductKind> for api::symbology::ProductKind {
                             }
                         }
                     },
+                    display_name: display_name.clone(),
                 }
             }
             ProductKind::EventContract { expiration } => {
