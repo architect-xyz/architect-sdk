@@ -416,23 +416,30 @@ impl Txn {
             L::Commodity => ProductKind::Commodity,
             L::Index => ProductKind::Index,
             L::EventSeries { display_name } => ProductKind::EventSeries { display_name },
-            L::Event { series, outcomes, mutually_exclusive, expiration } => {
-                ProductKind::Event {
-                    series: match series {
-                        None => None,
-                        Some(id) => Some(self.find_product_by_id(&id)?),
-                    },
-                    outcomes: outcomes
-                        .iter()
-                        .map(|p| {
-                            let p = self.find_product_by_id(&p)?;
-                            Ok(p)
-                        })
-                        .collect::<Result<_>>()?,
-                    mutually_exclusive,
-                    expiration,
-                }
-            }
+            L::Event {
+                series,
+                outcomes,
+                mutually_exclusive,
+                expiration,
+                display_category,
+                display_name,
+            } => ProductKind::Event {
+                series: match series {
+                    None => None,
+                    Some(id) => Some(self.find_product_by_id(&id)?),
+                },
+                outcomes: outcomes
+                    .iter()
+                    .map(|p| {
+                        let p = self.find_product_by_id(&p)?;
+                        Ok(p)
+                    })
+                    .collect::<Result<_>>()?,
+                mutually_exclusive,
+                expiration,
+                display_category,
+                display_name,
+            },
             L::EventOutcome { display_order, contracts, display_name } => {
                 ProductKind::EventOutcome {
                     display_order,

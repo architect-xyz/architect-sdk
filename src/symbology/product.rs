@@ -129,18 +129,20 @@ pub enum ProductKind {
     Index,
     Commodity,
     EventSeries {
-        display_name: String,
+        display_name: Option<String>,
     },
     Event {
         series: Option<ProductRef>,
         outcomes: Vec<ProductRef>,
         mutually_exclusive: Option<bool>,
         expiration: Option<DateTime<Utc>>,
+        display_category: Option<String>,
+        display_name: Option<String>,
     },
     EventOutcome {
-        display_order: Option<u32>,
         contracts: EventContracts,
-        display_name: String,
+        display_order: Option<u32>,
+        display_name: Option<String>,
     },
     EventContract {
         expiration: Option<DateTime<Utc>>,
@@ -162,21 +164,30 @@ pub enum EventContracts {
     },
 }
 
+impl EventContracts {
+    pub fn iter_contracts(&self, mut f: impl FnMut(ProductRef)) {
+        match self {
+            EventContracts::Single { yes, .. } => f(*yes),
+            EventContracts::Dual { yes, no, .. } => {
+                f(*yes);
+                f(*no);
+            }
+        }
+    }
+}
+
 impl From<EventContracts> for api::symbology::EventContracts {
     fn from(value: EventContracts) -> api::symbology::EventContracts {
         match value {
             EventContracts::Single { yes, yes_alias } => {
-                api::symbology::EventContracts::Single {
-                    yes: api::symbology::ProductId(*yes.clone().0.id),
-                    yes_alias: yes_alias,
-                }
+                api::symbology::EventContracts::Single { yes: yes.id, yes_alias }
             }
             EventContracts::Dual { yes, yes_alias, no, no_alias } => {
                 api::symbology::EventContracts::Dual {
-                    yes: api::symbology::ProductId(*yes.clone().0.id),
-                    yes_alias: yes_alias,
-                    no: api::symbology::ProductId(*no.clone().0.id),
-                    no_alias: no_alias,
+                    yes: yes.id,
+                    yes_alias,
+                    no: no.id,
+                    no_alias,
                 }
             }
         }
@@ -416,17 +427,23 @@ impl From<&ProductKind> for api::symbology::ProductKind {
                     display_name: display_name.clone(),
                 }
             }
-            ProductKind::Event { series, outcomes, mutually_exclusive, expiration } => {
-                api::symbology::ProductKind::Event {
-                    series: series.map(|s| s.id),
-                    outcomes: outcomes.iter().map(|p| p.id).collect(),
-                    mutually_exclusive: *mutually_exclusive,
-                    expiration: *expiration,
-                }
-            }
+            ProductKind::Event {
+                series,
+                outcomes,
+                mutually_exclusive,
+                expiration,
+                display_category,
+                display_name,
+            } => api::symbology::ProductKind::Event {
+                series: series.map(|s| s.id),
+                outcomes: outcomes.iter().map(|p| p.id).collect(),
+                mutually_exclusive: *mutually_exclusive,
+                expiration: *expiration,
+                display_category: display_category.clone(),
+                display_name: display_name.clone(),
+            },
             ProductKind::EventOutcome { display_order, contracts, display_name } => {
                 api::symbology::ProductKind::EventOutcome {
-                    display_order: *display_order,
                     contracts: match contracts {
                         EventContracts::Single { yes, yes_alias } => {
                             api::symbology::EventContracts::Single {
@@ -443,6 +460,7 @@ impl From<&ProductKind> for api::symbology::ProductKind {
                             }
                         }
                     },
+                    display_order: *display_order,
                     display_name: display_name.clone(),
                 }
             }
