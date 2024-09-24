@@ -465,7 +465,13 @@ impl Txn {
                     display_name,
                 }
             }
-            L::EventContract { expiration } => ProductKind::EventContract { expiration },
+            L::EventContract { underlying, expiration } => ProductKind::EventContract {
+                underlying: match underlying {
+                    Some(underlying) => Some(self.find_product_by_id(&underlying)?),
+                    None => None,
+                },
+                expiration,
+            },
             L::Unknown => ProductKind::Unknown,
         })
     }

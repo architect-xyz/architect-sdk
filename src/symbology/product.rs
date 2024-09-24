@@ -76,7 +76,9 @@ impl ProductInner {
                     f(*no);
                 }
             },
-            ProductKind::EventContract { .. } => {}
+            ProductKind::EventContract { underlying, .. } => {
+                underlying.map(|p| f(p));
+            }
         }
     }
 }
@@ -145,6 +147,7 @@ pub enum ProductKind {
         display_name: Option<String>,
     },
     EventContract {
+        underlying: Option<ProductRef>,
         expiration: Option<DateTime<Utc>>,
     },
     Unknown,
@@ -219,11 +222,22 @@ impl ProductKind {
         matches!(self, ProductKind::Option { .. })
     }
 
+    pub fn is_option_like(&self) -> bool {
+        match self {
+            ProductKind::Option { .. } => true,
+            ProductKind::EventContract { underlying, expiration } => {
+                underlying.is_some() && expiration.is_some()
+            }
+            _ => false,
+        }
+    }
+
     pub fn underlying(&self) -> Option<ProductRef> {
         match self {
             ProductKind::Perpetual { underlying, .. }
             | ProductKind::Future { underlying, .. }
-            | ProductKind::Option { underlying, .. } => *underlying,
+            | ProductKind::Option { underlying, .. }
+            | ProductKind::EventContract { underlying, .. } => *underlying,
             _ => None,
         }
     }
@@ -263,7 +277,7 @@ impl ProductKind {
                 )
             }
             ProductKind::Event { expiration, .. } => *expiration,
-            ProductKind::EventContract { expiration } => *expiration,
+            ProductKind::EventContract { expiration, .. } => *expiration,
             _ => None,
         }
     }
@@ -464,8 +478,11 @@ impl From<&ProductKind> for api::symbology::ProductKind {
                     display_name: display_name.clone(),
                 }
             }
-            ProductKind::EventContract { expiration } => {
-                api::symbology::ProductKind::EventContract { expiration: *expiration }
+            ProductKind::EventContract { underlying, expiration } => {
+                api::symbology::ProductKind::EventContract {
+                    underlying: underlying.map(|p| p.id),
+                    expiration: *expiration,
+                }
             }
             ProductKind::Unknown => api::symbology::ProductKind::Unknown,
         }

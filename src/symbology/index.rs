@@ -130,6 +130,11 @@ impl MarketIndex {
                             insert(&mut self.by_underlying, leg, i);
                         }
                     }
+                    ProductKind::EventContract { underlying, .. } => {
+                        if let Some(underlying) = underlying {
+                            insert(&mut self.by_underlying, underlying, i);
+                        }
+                    }
                     ProductKind::Coin { .. }
                     | ProductKind::Fiat
                     | ProductKind::Equity
@@ -138,7 +143,6 @@ impl MarketIndex {
                     | ProductKind::EventSeries { .. }
                     | ProductKind::Event { .. }
                     | ProductKind::EventOutcome { .. }
-                    | ProductKind::EventContract { .. }
                     | ProductKind::Unknown => (),
                 }
             }
@@ -219,6 +223,11 @@ impl MarketIndex {
                             remove(&mut self.by_underlying, leg, i);
                         }
                     }
+                    ProductKind::EventContract { underlying, .. } => {
+                        if let Some(underlying) = underlying {
+                            remove(&mut self.by_underlying, underlying, i);
+                        }
+                    }
                     ProductKind::Coin { .. }
                     | ProductKind::Fiat
                     | ProductKind::Equity
@@ -227,7 +236,6 @@ impl MarketIndex {
                     | ProductKind::EventSeries { .. }
                     | ProductKind::Event { .. }
                     | ProductKind::EventOutcome { .. }
-                    | ProductKind::EventContract { .. }
                     | ProductKind::Unknown => (),
                 }
             }
