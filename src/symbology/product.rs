@@ -232,6 +232,10 @@ impl ProductKind {
         }
     }
 
+    pub fn is_event_contract(&self) -> bool {
+        matches!(self, ProductKind::EventContract { .. })
+    }
+
     pub fn underlying(&self) -> Option<ProductRef> {
         match self {
             ProductKind::Perpetual { underlying, .. }
