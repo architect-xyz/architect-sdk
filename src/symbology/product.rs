@@ -304,7 +304,10 @@ impl ProductKind {
     }
 
     pub fn is_expired(&self, now: &DateTime<Utc>) -> bool {
-        self.expiration().is_some_and(|exp| exp.date_naive() < now.date_naive())
+        match self.expiration() {
+            Some(exp) => exp.date_naive() < now.date_naive(),
+            None => false,
+        }
     }
 
     pub fn is_linear(&self) -> bool {
