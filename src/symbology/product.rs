@@ -177,6 +177,13 @@ impl EventContracts {
             }
         }
     }
+    
+    pub fn yes(&self) -> ProductRef {
+        match self {
+            EventContracts::Single { yes, .. } => *yes,
+            EventContracts::Dual { yes, .. } => *yes,
+        }
+    }
 }
 
 impl From<EventContracts> for api::symbology::EventContracts {
