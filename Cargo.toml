@@ -11,6 +11,8 @@ name = "architect-sdk"
 version = "2.0.27"
 
 [features]
+default = ["grpc"]
+grpc = ["api/grpc", "tonic"]
 netidx = [
     "api/netidx",
     "dep:netidx",
@@ -68,6 +70,7 @@ sysinfo = { workspace = true, optional = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
+tonic = { workspace = true, optional = true }
 url = { workspace = true }
 uuid = { workspace = true }
 zeroize = { workspace = true }

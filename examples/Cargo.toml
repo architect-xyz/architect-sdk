@@ -1,0 +1,17 @@
+[package]
+edition = "2021"
+name = "sdk-examples"
+version = "0.1.0"
+
+# CR alee: try to get these to output to examples/ in targets
+[[bin]]
+name = "subscribe_l1_book_snapshots"
+path = "subscribe_l1_book_snapshots.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+architect-api = { package = "architect-api", version = "2", path = "../../api" }
+architect-sdk = { package = "architect-sdk", version = "2", path = ".." }
+futures = { workspace = true }
+tokio = { workspace = true }
+

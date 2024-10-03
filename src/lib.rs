@@ -4,6 +4,7 @@ pub mod account_manager;
 pub mod admin_stats;
 #[cfg(feature = "netidx")]
 pub mod channel_driver;
+pub mod client;
 #[cfg(feature = "netidx")]
 pub mod common;
 pub mod external_driver;
@@ -17,6 +18,8 @@ pub mod synced;
 #[cfg(feature = "netidx")]
 pub mod tls;
 
+#[cfg(feature = "grpc")]
+pub use client::ArchitectClient;
 #[cfg(feature = "netidx")]
 pub use {
     channel_driver::{ChannelDriver, ChannelDriverBuilder},
