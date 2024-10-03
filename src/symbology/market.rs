@@ -4,8 +4,9 @@ use super::{
 };
 use crate::static_ref;
 use anyhow::{bail, Result};
+#[cfg(feature = "netidx")]
+use api::marketdata::NetidxFeedPaths;
 use api::{
-    marketdata::NetidxFeedPaths,
     symbology::{
         market::{MarketId, MarketInfo},
         Symbolic,
@@ -14,6 +15,7 @@ use api::{
 };
 use arc_swap::ArcSwap;
 use immutable_chunkmap::map::MapL as Map;
+#[cfg(feature = "netidx")]
 use netidx::path::Path;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
@@ -87,6 +89,7 @@ impl From<MarketRef> for api::symbology::Market {
     }
 }
 
+#[cfg(feature = "netidx")]
 impl NetidxFeedPaths for MarketRef {
     fn path_by_id(&self, base: &Path) -> Path {
         base.append("by-id").append(&self.id.to_string())

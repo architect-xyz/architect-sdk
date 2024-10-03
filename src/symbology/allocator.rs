@@ -2,8 +2,10 @@
 //! in Rust.  Reading is free, writing should be done through [Txn] which provides
 //! a mutex, as StaticBumpAllocator::insert isn't thread-safe.
 
-use portable_atomic::Ordering;
-use std::{mem::MaybeUninit, sync::atomic::AtomicUsize};
+use std::{
+    mem::MaybeUninit,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 pub struct StaticBumpAllocator<T: Clone + 'static, const SZ: usize> {
     data: &'static mut [MaybeUninit<T>],

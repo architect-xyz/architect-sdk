@@ -10,9 +10,26 @@ license = "AGPL-3.0-only"
 name = "architect-sdk"
 version = "2.0.27"
 
+[features]
+netidx = [
+    "api/netidx",
+    "dep:netidx",
+    "md-5",
+    "netidx-archive",
+    "netidx-core",
+    "netidx-derive",
+    "netidx-protocols",
+    "num_cpus",
+    "pkcs8",
+    "openssl",
+    "serde_yaml",
+    "sysinfo",
+    "zstd"
+]
+
 [dependencies]
 anyhow = { workspace = true }
-api = { package = "architect-api", version = "2.0.27", path = "../api", features = ["netidx"] }
+api = { package = "architect-api", version = "2.0.27", path = "../api" }
 arc-swap = { workspace = true }
 arcstr = { workspace = true }
 async-stream = { workspace = true }
@@ -27,35 +44,34 @@ immutable-chunkmap = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
 maybe-owned = { workspace = true }
-md-5 = { workspace = true }
-netidx = { workspace = true }
-netidx-archive = { workspace = true }
-netidx-core = { workspace = true }
-netidx-derive = { workspace = true }
-netidx-protocols = { workspace = true }
-num_cpus = { workspace = true }
+md-5 = { workspace = true, optional = true }
+netidx = { workspace = true, optional = true }
+netidx-archive = { workspace = true, optional = true }
+netidx-core = { workspace = true, optional = true }
+netidx-derive = { workspace = true, optional = true }
+netidx-protocols = { workspace = true, optional = true }
+num_cpus = { workspace = true, optional = true }
 once_cell = { workspace = true }
-openssl = { workspace = true }
+openssl = { workspace = true, optional = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
-pkcs8 = { workspace = true }
-portable-atomic = { workspace = true }
+pkcs8 = { workspace = true, optional = true }
 regex = { workspace = true }
 rust_decimal = { workspace = true }
 rust_decimal_macros = { workspace = true }
 serde = { workspace = true }
 serde_derive = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde_yaml = { workspace = true, optional = true }
 smallvec = { workspace = true }
-sysinfo = { workspace = true }
+sysinfo = { workspace = true, optional = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
 zeroize = { workspace = true }
-zstd = { workspace = true }
+zstd = { workspace = true, optional = true }
 
 [package.metadata.cargo-machete]
 ignored = [

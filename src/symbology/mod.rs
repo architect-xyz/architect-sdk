@@ -2,6 +2,7 @@ use arc_swap::ArcSwap;
 use once_cell::sync::Lazy;
 
 pub(self) mod allocator;
+#[cfg(feature = "netidx")]
 pub mod client;
 pub mod cpty;
 pub mod external_client;

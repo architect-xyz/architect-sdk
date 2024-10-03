@@ -2,21 +2,26 @@ use super::{
     market::*, product::*, route::*, venue::*, MarketIndex, StaticRef, GLOBAL_INDEX,
 };
 use anyhow::{anyhow, bail, Result};
+#[cfg(feature = "netidx")]
+use api::{pool, symbology::SymbologyUpdateKind};
 use api::{
-    pool,
-    symbology::{MarketId, ProductId, RouteId, SymbologyUpdateKind, VenueId},
+    symbology::{MarketId, ProductId, RouteId, VenueId},
     Str,
 };
+#[cfg(feature = "netidx")]
 use bytes::{Buf, Bytes, BytesMut};
 use fxhash::FxHashSet;
 use immutable_chunkmap::{map::MapL as Map, set};
 use log::warn;
+#[cfg(feature = "netidx")]
 use md5::{Digest, Md5};
+#[cfg(feature = "netidx")]
 use netidx::{pack::Pack, pool::Pooled};
 use parking_lot::{Mutex, MutexGuard};
 use smallvec::SmallVec;
+#[cfg(feature = "netidx")]
+use std::cell::RefCell;
 use std::{
-    cell::RefCell,
     collections::BTreeMap,
     sync::{atomic::Ordering, Arc},
 };
@@ -563,6 +568,7 @@ impl Txn {
     }
 
     /// Updates are idempotent; symbology update replays should be harmless
+    #[cfg(feature = "netidx")]
     pub fn apply(&mut self, up: &SymbologyUpdateKind) -> Result<()> {
         use api::symbology::SymbologyUpdateKind::*;
         match up {
@@ -641,6 +647,7 @@ impl Txn {
         }
     }
 
+    #[cfg(feature = "netidx")]
     fn dump_product(
         &self,
         pset: &mut FxHashSet<ProductRef>,
@@ -659,6 +666,7 @@ impl Txn {
     }
 
     /// dump the current symbology as of Txn to a series of symbology updates
+    #[cfg(feature = "netidx")]
     pub fn dump(&self) -> Pooled<Vec<SymbologyUpdateKind>> {
         pool!(pool_pset, FxHashSet<ProductRef>, 2, 1_000_000);
         pool!(pool_update, Vec<SymbologyUpdateKind>, 2, 1_000_000);
@@ -681,6 +689,7 @@ impl Txn {
 
     /// dump the symbology db in a squashed form, return the md5 sum and
     /// the squashed update. The squashed update is compressed with zstd.
+    #[cfg(feature = "netidx")]
     pub fn dump_squashed(&self) -> Result<(Bytes, SymbologyUpdateKind)> {
         thread_local! {
             static BUF: RefCell<BytesMut> = RefCell::new(BytesMut::new());
