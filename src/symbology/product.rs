@@ -177,6 +177,20 @@ impl EventContracts {
             }
         }
     }
+
+    pub fn yes(&self) -> ProductRef {
+        match self {
+            EventContracts::Single { yes, .. } => *yes,
+            EventContracts::Dual { yes, .. } => *yes,
+        }
+    }
+
+    pub fn no(&self) -> Option<ProductRef> {
+        match self {
+            EventContracts::Single { .. } => None,
+            EventContracts::Dual { no, .. } => Some(*no),
+        }
+    }
 }
 
 impl From<EventContracts> for api::symbology::EventContracts {
@@ -232,8 +246,33 @@ impl ProductKind {
         }
     }
 
+    pub fn is_event(&self) -> bool {
+        matches!(self, ProductKind::Event { .. })
+    }
+
+    pub fn is_event_outcome(&self) -> bool {
+        matches!(self, ProductKind::EventOutcome { .. })
+    }
+
     pub fn is_event_contract(&self) -> bool {
         matches!(self, ProductKind::EventContract { .. })
+    }
+
+    /// Get all descendant event contract pairs.
+    pub fn event_contracts(&self) -> Option<Vec<EventContracts>> {
+        match self {
+            ProductKind::Event { outcomes, .. } => {
+                let mut res = vec![];
+                for p in outcomes.iter() {
+                    if let Some(cs) = p.kind.event_contracts() {
+                        res.extend(cs);
+                    }
+                }
+                Some(res)
+            }
+            ProductKind::EventOutcome { contracts, .. } => Some(vec![contracts.clone()]),
+            _ => None,
+        }
     }
 
     pub fn underlying(&self) -> Option<ProductRef> {
