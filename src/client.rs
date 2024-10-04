@@ -1,12 +1,14 @@
 //! General purpose client for Architect
 
 #[cfg(feature = "grpc")]
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 #[cfg(feature = "grpc")]
 use api::{
     external::{marketdata::*, symbology::*},
     grpc::json_service::{marketdata_client::*, symbology_client::*},
 };
+#[cfg(feature = "grpc")]
+use hickory_resolver::{config::*, TokioAsyncResolver};
 #[cfg(feature = "grpc")]
 use tonic::codec::Streaming;
 
@@ -14,6 +16,18 @@ use tonic::codec::Streaming;
 pub struct ArchitectClient {}
 
 impl ArchitectClient {
+    #[cfg(feature = "grpc")]
+    pub async fn resolve_service(&self, domain_name: &str) -> Result<String> {
+        let resolver =
+            TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default());
+        let records = resolver.srv_lookup(domain_name).await?;
+        let rec = records
+            .iter()
+            .next()
+            .ok_or_else(|| anyhow!("no SRV records found for domain: {domain_name}"))?;
+        Ok(format!("dns://{}:{}", rec.target(), rec.port()))
+    }
+
     /// Load symbology from the given endpoint into global memory.
     #[cfg(feature = "grpc")]
     pub async fn load_symbology_from(&self, endpoint: impl AsRef<str>) -> Result<()> {
