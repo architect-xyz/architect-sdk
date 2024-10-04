@@ -1,9 +1,26 @@
 use anyhow::Result;
 use architect_sdk::{symbology::*, ArchitectClient};
+use clap::Parser;
 use futures::StreamExt;
+
+#[derive(Parser)]
+struct Cli {
+    #[arg(long)]
+    multiple: bool,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let cli = Cli::parse();
+    if cli.multiple {
+        subscribe_to_multiple_streams().await?;
+    } else {
+        subscribe_to_one_stream().await?;
+    }
+    Ok(())
+}
+
+async fn subscribe_to_one_stream() -> Result<()> {
     let mut client = ArchitectClient::default();
     let endpoint = client.resolve_service("coinbase.marketdata.architect.co").await?;
     println!("Connecting to endpoint: {endpoint}");
@@ -19,5 +36,9 @@ async fn main() -> Result<()> {
             println!("<unknown> | {snap:?}");
         };
     }
+    Ok(())
+}
+
+async fn subscribe_to_multiple_streams() -> Result<()> {
     Ok(())
 }

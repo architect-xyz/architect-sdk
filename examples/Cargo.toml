@@ -12,6 +12,7 @@ path = "subscribe_l1_book_snapshots.rs"
 anyhow = { workspace = true }
 architect-api = { package = "architect-api", version = "2", path = "../../api" }
 architect-sdk = { package = "architect-sdk", version = "2", path = ".." }
+clap = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
 
