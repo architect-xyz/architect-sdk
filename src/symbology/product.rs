@@ -250,6 +250,10 @@ impl ProductKind {
         matches!(self, ProductKind::Event { .. })
     }
 
+    pub fn is_event_outcome(&self) -> bool {
+        matches!(self, ProductKind::EventOutcome { .. })
+    }
+
     pub fn is_event_contract(&self) -> bool {
         matches!(self, ProductKind::EventContract { .. })
     }
