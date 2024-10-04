@@ -4,12 +4,13 @@ use futures::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    const ENDPOINT: &str = "http://localhost:10000";
     let mut client = ArchitectClient::default();
+    let endpoint = client.resolve_service("coinbase.marketdata.architect.co").await?;
+    println!("Connecting to endpoint: {endpoint}");
     println!("Loading symbology...");
-    client.load_symbology_from(ENDPOINT).await?;
+    client.load_symbology_from(&endpoint).await?;
     println!("Subscribing to marketdata...");
-    let mut stream = client.subscribe_l1_book_snapshots_from(ENDPOINT, None).await?;
+    let mut stream = client.subscribe_l1_book_snapshots_from(&endpoint, None).await?;
     while let Some(res) = stream.next().await {
         let snap = res?;
         if let Some(market) = MarketRef::get_by_id(&snap.market_id) {

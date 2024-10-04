@@ -12,7 +12,7 @@ version = "2.0.30"
 
 [features]
 default = ["grpc"]
-grpc = ["api/grpc", "tonic"]
+grpc = ["api/grpc", "hickory-resolver", "tonic"]
 netidx = [
     "api/netidx",
     "dep:netidx",
@@ -42,6 +42,7 @@ enumflags2 = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 fxhash = { workspace = true }
+hickory-resolver = { workspace = true, optional = true }
 immutable-chunkmap = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
