@@ -37,6 +37,7 @@ arcstr = { workspace = true }
 async-stream = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+clap = { workspace = true }
 derive_builder = { workspace = true }
 enumflags2 = { workspace = true }
 futures = { workspace = true }
