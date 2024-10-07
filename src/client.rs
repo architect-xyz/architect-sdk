@@ -53,6 +53,17 @@ impl ArchitectClient {
     }
 
     #[cfg(feature = "grpc")]
+    pub async fn load_symbology_from_all<S: AsRef<str>>(
+        &self,
+        endpoints: impl IntoIterator<Item = S>,
+    ) -> Result<()> {
+        for endpoint in endpoints.into_iter() {
+            self.load_symbology_from(endpoint).await?;
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "grpc")]
     pub async fn subscribe_l1_book_snapshots_from(
         // NB alee: keeping this mut for now in case we mux clients
         &mut self,
