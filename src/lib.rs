@@ -1,20 +1,30 @@
+#[cfg(feature = "netidx")]
 pub mod account_manager;
+#[cfg(feature = "netidx")]
 pub mod admin_stats;
+#[cfg(feature = "netidx")]
 pub mod channel_driver;
+pub mod client;
+#[cfg(feature = "netidx")]
 pub mod common;
+pub mod external_driver;
 pub mod marketdata;
-pub mod oms;
-pub mod order_id_allocator;
+#[cfg(feature = "netidx")]
 pub mod orderflow;
+#[cfg(feature = "netidx")]
 pub mod paths;
 pub mod symbology;
 pub mod synced;
+#[cfg(feature = "netidx")]
+pub mod tls;
 
-pub use channel_driver::{ChannelDriver, ChannelDriverBuilder};
-pub use common::Common;
-pub use marketdata::managed_marketdata::ManagedMarketdata;
-pub use order_id_allocator::{
-    atomic::AtomicOrderIdAllocator, OrderIdAllocator, OrderIdAllocatorRequest,
-    OrderIdAllocatorRequestBuilder,
+#[cfg(feature = "grpc")]
+pub use client::ArchitectClient;
+#[cfg(feature = "netidx")]
+pub use {
+    channel_driver::{ChannelDriver, ChannelDriverBuilder},
+    common::Common,
+    marketdata::managed_marketdata::ManagedMarketdata,
+    orderflow::order_id_allocator::{AtomicOrderIdAllocator, OrderIdAllocator},
+    paths::Paths,
 };
-pub use paths::Paths;

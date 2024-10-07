@@ -1,39 +1,42 @@
 use super::{
-    allocator::AllocatorSnapshot, market::MarketInner, static_ref::StaticRef, Market,
-    MarketKind, Product, ProductKind, Route, Venue,
+    static_ref::StaticRef, MarketKind, MarketRef, ProductKind, ProductRef, RouteRef,
+    VenueRef,
 };
 use anyhow::{bail, Result};
 use api::{
     symbology::{
-        market::NormalizedMarketInfo,
         query::{DateQ, Query},
         Symbolic,
     },
     Str,
 };
-use chrono::{prelude::*, Duration};
+use chrono::prelude::*;
 use immutable_chunkmap::{map::MapM as Map, set};
+use std::sync::Arc;
 
 pub type Set<T> = set::Set<T, 16>;
 
 /// This a queryable index of all markets
 #[derive(Debug, Clone)]
 pub struct MarketIndex {
-    all: Set<Market>,
-    by_base: Map<Product, Set<Market>>,
-    by_base_kind: Map<Str, Set<Market>>,
-    by_pool_has: Map<Product, Set<Market>>,
-    by_quote: Map<Product, Set<Market>>,
-    by_venue: Map<Venue, Set<Market>>,
-    by_route: Map<Route, Set<Market>>,
-    by_exchange_symbol: Map<Str, Set<Market>>,
-    by_underlying: Map<Product, Set<Market>>,
-    by_expiration: Map<DateTime<Utc>, Set<Market>>,
-    snap: Option<AllocatorSnapshot<MarketInner>>,
+    all: Set<MarketRef>,
+    // track which products/markets reference which products,
+    // so we can update products/markets when products update
+    pub(super) by_pointee_p: Map<ProductRef, set::SetM<ProductRef>>,
+    pub(super) by_pointee_m: Map<ProductRef, set::SetM<MarketRef>>,
+    by_base: Map<ProductRef, Set<MarketRef>>,
+    by_base_kind: Map<Str, Set<MarketRef>>,
+    by_pool_has: Map<ProductRef, Set<MarketRef>>,
+    by_quote: Map<ProductRef, Set<MarketRef>>,
+    by_venue: Map<VenueRef, Set<MarketRef>>,
+    by_route: Map<RouteRef, Set<MarketRef>>,
+    by_exchange_symbol: Map<Str, Set<MarketRef>>,
+    by_underlying: Map<ProductRef, Set<MarketRef>>,
+    by_expiration: Map<DateTime<Utc>, Set<MarketRef>>,
 }
 
-impl FromIterator<Market> for MarketIndex {
-    fn from_iter<T: IntoIterator<Item = Market>>(iter: T) -> Self {
+impl FromIterator<MarketRef> for MarketIndex {
+    fn from_iter<T: IntoIterator<Item = MarketRef>>(iter: T) -> Self {
         let mut t = Self::new();
         for p in iter {
             t.insert(p)
@@ -47,6 +50,8 @@ impl MarketIndex {
     pub fn new() -> Self {
         Self {
             all: Set::new(),
+            by_pointee_p: Map::default(),
+            by_pointee_m: Map::default(),
             by_base: Map::default(),
             by_base_kind: Map::default(),
             by_quote: Map::default(),
@@ -56,16 +61,20 @@ impl MarketIndex {
             by_exchange_symbol: Map::default(),
             by_underlying: Map::default(),
             by_expiration: Map::default(),
-            snap: None,
         }
     }
 
+    /// easy access to global market index
+    pub fn current() -> arc_swap::Guard<Arc<MarketIndex>> {
+        super::GLOBAL_INDEX.load()
+    }
+
     /// insert a market into the index
-    pub fn insert(&mut self, i: Market) {
+    pub fn insert(&mut self, i: MarketRef) {
         fn insert<K: Ord + Clone + Copy + 'static>(
-            m: &mut Map<K, Set<Market>>,
+            m: &mut Map<K, Set<MarketRef>>,
             k: K,
-            i: Market,
+            i: MarketRef,
         ) {
             let mut set = m.remove_cow(&k).unwrap_or(Set::new());
             set.insert_cow(i);
@@ -121,11 +130,19 @@ impl MarketIndex {
                             insert(&mut self.by_underlying, leg, i);
                         }
                     }
+                    ProductKind::EventContract { underlying, .. } => {
+                        if let Some(underlying) = underlying {
+                            insert(&mut self.by_underlying, underlying, i);
+                        }
+                    }
                     ProductKind::Coin { .. }
                     | ProductKind::Fiat
                     | ProductKind::Equity
                     | ProductKind::Index
                     | ProductKind::Commodity
+                    | ProductKind::EventSeries { .. }
+                    | ProductKind::Event { .. }
+                    | ProductKind::EventOutcome { .. }
                     | ProductKind::Unknown => (),
                 }
             }
@@ -136,17 +153,21 @@ impl MarketIndex {
             }
             MarketKind::Unknown => (),
         }
+        // insert references
+        i.iter_references(|r| {
+            self.by_pointee_m.get_or_default_cow(r).insert_cow(i);
+        });
     }
 
-    /// remove a tradable product from the index
-    pub fn remove(&mut self, i: Market) {
+    /// remove a market from the index
+    pub fn remove(&mut self, i: &MarketRef) {
         fn remove<K: Ord + Clone + Copy + 'static>(
-            m: &mut Map<K, Set<Market>>,
+            m: &mut Map<K, Set<MarketRef>>,
             k: K,
-            i: Market,
+            i: &MarketRef,
         ) {
             if let Some(mut set) = m.remove_cow(&k) {
-                set.remove_cow(&i);
+                set.remove_cow(i);
                 if set.len() > 0 {
                     m.insert_cow(k, set);
                 }
@@ -202,11 +223,19 @@ impl MarketIndex {
                             remove(&mut self.by_underlying, leg, i);
                         }
                     }
+                    ProductKind::EventContract { underlying, .. } => {
+                        if let Some(underlying) = underlying {
+                            remove(&mut self.by_underlying, underlying, i);
+                        }
+                    }
                     ProductKind::Coin { .. }
                     | ProductKind::Fiat
                     | ProductKind::Equity
                     | ProductKind::Index
                     | ProductKind::Commodity
+                    | ProductKind::EventSeries { .. }
+                    | ProductKind::Event { .. }
+                    | ProductKind::EventOutcome { .. }
                     | ProductKind::Unknown => (),
                 }
             }
@@ -217,9 +246,22 @@ impl MarketIndex {
             }
             MarketKind::Unknown => (),
         }
+        // remove references
+        i.iter_references(|r| {
+            if let Some(m) = self.by_pointee_m.get_mut_cow(&r) {
+                m.remove_cow(i);
+            }
+        });
     }
 
-    fn query_(&self, q: &Query) -> Set<Market> {
+    pub(super) fn remove_product(&mut self, p: &ProductRef) {
+        self.by_base.remove_cow(&p);
+        self.by_pool_has.remove_cow(&p);
+        self.by_quote.remove_cow(&p);
+        self.by_underlying.remove_cow(&p);
+    }
+
+    fn query_(&self, q: &Query) -> Set<MarketRef> {
         fn start_of_day(dt: DateTime<Utc>) -> DateTime<Utc> {
             let date = dt.naive_utc().date();
             let ndt = NaiveDateTime::new(date, NaiveTime::from_hms_opt(0, 0, 0).unwrap());
@@ -251,67 +293,36 @@ impl MarketIndex {
                     .map(|t| *t)
                     .collect()
             }
-            Query::Base(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
-                self.by_base.get(&p).cloned().unwrap_or_else(Set::new)
-            }),
+            Query::Base(s) => ProductRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |p| {
+                    self.by_base.get(&p).cloned().unwrap_or_else(Set::new)
+                }),
             Query::BaseKind(s) => {
                 self.by_base_kind.get(s).cloned().unwrap_or_else(Set::new)
             }
-            Query::Quote(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
-                self.by_quote.get(&p).cloned().unwrap_or_else(Set::new)
-            }),
-            Query::Pool(s) => Product::get_by_name_or_id(s).map_or_else(Set::new, |p| {
-                self.by_pool_has.get(&p).cloned().unwrap_or_else(Set::new)
-            }),
-            Query::Route(s) => Route::get_by_name_or_id(s).map_or_else(Set::new, |r| {
-                self.by_route.get(&r).cloned().unwrap_or_else(Set::new)
-            }),
-            Query::Venue(s) => Venue::get_by_name_or_id(s).map_or_else(Set::new, |v| {
-                self.by_venue.get(&v).cloned().unwrap_or_else(Set::new)
-            }),
+            Query::Quote(s) => ProductRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |p| {
+                    self.by_quote.get(&p).cloned().unwrap_or_else(Set::new)
+                }),
+            Query::Pool(s) => ProductRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |p| {
+                    self.by_pool_has.get(&p).cloned().unwrap_or_else(Set::new)
+                }),
+            Query::Route(s) => RouteRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |r| {
+                    self.by_route.get(&r).cloned().unwrap_or_else(Set::new)
+                }),
+            Query::Venue(s) => VenueRef::get_by_name_or_id(s)
+                .map_or_else(Set::new, |v| {
+                    self.by_venue.get(&v).cloned().unwrap_or_else(Set::new)
+                }),
             Query::ExchangeSymbol(s) => {
                 self.by_exchange_symbol.get(s).cloned().unwrap_or_else(Set::new)
             }
-            Query::Underlying(s) => Product::get_by_name_or_id(s)
+            Query::Underlying(s) => ProductRef::get_by_name_or_id(s)
                 .map_or_else(Set::new, |p| {
                     self.by_underlying.get(&p).cloned().unwrap_or_else(Set::new)
                 }),
-            Query::Expired => {
-                let now = Utc::now();
-                let res: Set<Market> = self
-                    .all
-                    .into_iter()
-                    .filter(|t| {
-                        if let Some(exp) = match t.kind {
-                            MarketKind::Exchange(ref x) => match x.base.kind {
-                                ProductKind::Future { expiration, .. }
-                                | ProductKind::Option { expiration, .. } => {
-                                    Some(expiration)
-                                }
-                                _ => None,
-                            },
-                            _ => None,
-                        } {
-                            match exp {
-                                None => return false,
-                                Some(exp) => {
-                                    // CR-soon bharrison: I think this is a bug?
-                                    // We're inside `filter` so this is saying,
-                                    // we're *not* "Expired" if now is more than 8 hours
-                                    // past expiration...
-                                    if exp < now - Duration::hours(8) {
-                                        return false;
-                                    }
-                                }
-                            }
-                        }
-                        // CR-soon bharrison: I think this is also incorrect
-                        !t.extra_info.is_delisted()
-                    })
-                    .map(|t| *t)
-                    .collect();
-                res
-            }
             Query::Expiration(dq) => match dq {
                 DateQ::On(dt) => {
                     let date = dt.naive_utc().date();
@@ -336,37 +347,23 @@ impl MarketIndex {
         }
     }
 
-    /// index all the markets that were added to the symbology since the index
-    /// was last updated. If none were added this is very quick. If the index
-    /// has never been updated this will index all tradable products
-    pub fn update(&mut self) {
-        let snap = Market::allocator_snapshot(self.snap, |p| self.insert(p));
-        self.snap = Some(snap);
-    }
-
     /// Query the index, returning the set of all tradable products
     /// that match the query.
-    pub fn query(&self, q: &Query) -> Set<Market> {
+    pub fn query(&self, q: &Query) -> Set<MarketRef> {
         self.query_(q)
     }
 
-    /// This is the same as calling update followed by query
-    pub fn update_and_query(&mut self, q: &Query) -> Set<Market> {
-        self.update();
-        self.query(q)
-    }
-
     /// Return all markets in the index
-    pub fn all(&self) -> Set<Market> {
+    pub fn all(&self) -> Set<MarketRef> {
         self.all.clone()
     }
 
     pub fn find_exactly_one_by_exchange_symbol<S: AsRef<str> + Ord>(
         &self,
-        venue: Venue,
-        route: Route,
+        venue: VenueRef,
+        route: RouteRef,
         exchange_symbol: S,
-    ) -> Result<Market> {
+    ) -> Result<MarketRef> {
         let res = self
             .by_exchange_symbol
             .get(exchange_symbol.as_ref())
@@ -395,11 +392,11 @@ impl MarketIndex {
 
     pub fn find_exactly_one_by_base_and_quote(
         &self,
-        venue: Venue,
-        route: Route,
-        base: Product,
-        quote: Product,
-    ) -> Result<Market> {
+        venue: VenueRef,
+        route: RouteRef,
+        base: ProductRef,
+        quote: ProductRef,
+    ) -> Result<MarketRef> {
         let res = self.by_base.get(&base).cloned().unwrap_or_else(Set::new);
         let mut iter = res.into_iter().filter(|m| {
             m.venue == venue

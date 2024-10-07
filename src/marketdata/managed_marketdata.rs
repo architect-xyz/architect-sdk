@@ -6,7 +6,7 @@
 
 use super::book_client::BookClient;
 use crate::{
-    symbology::{Cpty, Market, MarketKind},
+    symbology::{Cpty, MarketKind, MarketRef},
     synced::Synced,
     Common,
 };
@@ -15,7 +15,7 @@ use api::marketdata::{RfqRequest, RfqResponse};
 use futures::channel::mpsc;
 use futures_util::StreamExt;
 use fxhash::FxHashMap;
-use log::{error, warn};
+use log::{debug, error, warn};
 use netidx::{
     pool::Pooled,
     subscriber::{Dval, Event, SubId, UpdatesFlags, Value},
@@ -42,7 +42,7 @@ pub struct ManagedMarketdata {
 
 // CR alee: periodically garbage collect weaks that have been dropped
 pub struct BookHandles {
-    by_market: FxHashMap<Market, Weak<Mutex<BookClient>>>,
+    by_market: FxHashMap<MarketRef, Weak<Mutex<BookClient>>>,
     by_sub_id: FxHashMap<SubId, Weak<Mutex<BookClient>>>,
 }
 
@@ -52,7 +52,7 @@ pub struct RfqHandles {
 }
 
 pub struct DvalHandles {
-    by_market_and_path_leaf: FxHashMap<(Market, String), Weak<Mutex<DvalHandle>>>,
+    by_market_and_path_leaf: FxHashMap<(MarketRef, String), Weak<Mutex<DvalHandle>>>,
     by_sub_id: FxHashMap<SubId, Weak<Mutex<DvalHandle>>>,
 }
 
@@ -192,7 +192,8 @@ impl ManagedMarketdata {
 
     pub async fn subscribe(
         &self,
-        market: Market,
+        market: MarketRef,
+        delayed: bool,
     ) -> (Arc<Mutex<BookClient>>, Synced<u64>) {
         let mut book_handles = self.book_handles.lock().await;
         if let Some(existing) =
@@ -201,7 +202,9 @@ impl ManagedMarketdata {
             let synced = existing.lock().await.subscribe_updates();
             return (existing, synced);
         }
-        let book_path = self.common.paths.marketdata_rt_by_name(market).append("book");
+        let book_path =
+            self.common.paths.marketdata_by_name(market, false, delayed).append("book");
+        debug!("subscribing to book at {}", book_path);
         let book_client = BookClient::new(
             &self.common.subscriber,
             &book_path,
@@ -219,11 +222,15 @@ impl ManagedMarketdata {
 
     pub async fn subscribe_path(
         &self,
-        market: Market,
+        market: MarketRef,
         path_leaf: String,
+        delayed: bool,
     ) -> Result<(Arc<Mutex<DvalHandle>>, Synced<u64>)> {
-        let path =
-            self.common.paths.marketdata_rt_by_name(market).append(path_leaf.as_str());
+        let path = self
+            .common
+            .paths
+            .marketdata_by_name(market, false, delayed)
+            .append(path_leaf.as_str());
         let (handle, synced) = {
             let mut dval_handles = self.dval_handles.lock().await;
             if let Some(existing) = dval_handles
@@ -260,7 +267,7 @@ impl ManagedMarketdata {
 
     pub async fn subscribe_rfq(
         &self,
-        market: Market,
+        market: MarketRef,
         qty: Decimal,
     ) -> Result<(Arc<Mutex<RfqResponseHandle>>, Synced<u64>)> {
         let cpty = Cpty { venue: market.venue, route: market.route };

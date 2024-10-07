@@ -1,6 +1,6 @@
-use crate::{admin_stats::AdminStats, ChannelDriverBuilder, Paths};
-use anyhow::{anyhow, bail, Context, Result};
-use api::{symbology::CptyId, ComponentId, Config};
+use crate::{admin_stats::AdminStats, tls, ChannelDriverBuilder, Paths};
+use anyhow::{anyhow, Context, Result};
+use api::{symbology::CptyId, ComponentId, Config, UserId};
 use fxhash::{FxHashMap, FxHashSet};
 use log::debug;
 use netidx::{
@@ -10,9 +10,9 @@ use netidx::{
     subscriber::{DesiredAuth, Subscriber},
 };
 use once_cell::sync::OnceCell;
-use openssl::{pkey::Private, rsa::Rsa, x509::X509};
 use std::{fs, ops::Deref, path::PathBuf, str::FromStr, sync::Arc};
-use tokio::task;
+use tokio::{sync::Mutex, task};
+use url::Url;
 
 /// Common data and functionality shared by most everything in the core,
 /// derived from the config.  
@@ -90,9 +90,23 @@ impl Common {
         for cpty in f.use_legacy_hist_marketdata {
             use_legacy_hist_marketdata.insert(CptyId::from_str(&cpty)?);
         }
+        let mut external_marketdata = FxHashMap::default();
+        for (cpty, url) in f.external_marketdata.iter() {
+            external_marketdata.insert(CptyId::from_str(&cpty)?, Url::parse(url)?);
+        }
+        let identity = tls::netidx_tls_identity(&netidx_config)
+            .map(|(_, identity)| {
+                let cert = tls::netidx_tls_identity_certificate(identity)?;
+                let subj = tls::subject_name(&cert)?
+                    .ok_or_else(|| anyhow!("missing subject name"))?;
+                let uid: UserId = subj.parse()?;
+                Ok::<_, anyhow::Error>(uid)
+            })
+            .transpose()?;
         Ok(Self(Arc::new(CommonInner {
             config_path,
             config,
+            identity,
             netidx_config,
             netidx_config_path: f.netidx_config,
             desired_auth,
@@ -114,6 +128,8 @@ impl Common {
                 use_legacy_hist_marketdata,
             },
             stats: OnceCell::new(),
+            external_symbology: Mutex::new(FxHashMap::default()),
+            external_marketdata,
         })))
     }
 
@@ -138,68 +154,6 @@ impl Common {
     /// Load from the default location
     pub async fn load_default() -> Result<Self> {
         Self::from_file(None::<&str>).await
-    }
-
-    /// Get the architect tls identity
-    pub fn get_tls_identity(
-        &self,
-    ) -> Result<(&netidx::config::Tls, &netidx::config::TlsIdentity)> {
-        let tls =
-            self.netidx_config.tls.as_ref().ok_or_else(|| anyhow!("no tls config"))?;
-        let identity = tls
-            .identities
-            .get("xyz.architect.")
-            .ok_or_else(|| anyhow!("architect.xyz identity not found"))?;
-        Ok((tls, identity))
-    }
-
-    // CR-someday alee: switch all of this to rustls?
-    /// Load and decrypt the private key from the configured identity
-    /// Note this does blocking operations, so within an async context
-    /// call it with block_in_place
-    pub fn load_private_key(&self) -> Result<Rsa<Private>> {
-        use pkcs8::{
-            der::{pem::PemLabel, zeroize::Zeroize},
-            EncryptedPrivateKeyInfo, PrivateKeyInfo, SecretDocument,
-        };
-        let (tls, identity) = self.get_tls_identity()?;
-        let path = &identity.private_key;
-        debug!("reading key from {}", path);
-        let pem = fs::read_to_string(&path)?;
-        let (label, doc) = match SecretDocument::from_pem(&pem) {
-            Ok((label, doc)) => (label, doc),
-            Err(e) => bail!("failed to load pem {}, error: {}", path, e),
-        };
-        debug!("key label is {}", label);
-        if label == EncryptedPrivateKeyInfo::PEM_LABEL {
-            if !EncryptedPrivateKeyInfo::try_from(doc.as_bytes()).is_ok() {
-                bail!("encrypted key malformed")
-            }
-            debug!("decrypting key");
-            // try password-protected
-            let mut password = netidx::tls::load_key_password(
-                tls.askpass.as_ref().map(|s| s.as_str()),
-                &path,
-            )?;
-            let pkey = Rsa::private_key_from_pem_passphrase(
-                pem.as_bytes(),
-                password.as_bytes(),
-            )?;
-            password.zeroize();
-            Ok(pkey)
-        } else if label == PrivateKeyInfo::PEM_LABEL {
-            Ok(Rsa::private_key_from_pem(pem.as_bytes())?)
-        } else {
-            bail!("unknown key type")
-        }
-    }
-
-    /// Load the public key/certificate from the configured
-    /// identity. Note this does blocking operations, so within an
-    /// async context call it with block_in_place
-    pub fn load_certificate(&self) -> Result<X509> {
-        let (_, identity) = self.get_tls_identity()?;
-        Ok(X509::from_pem(&fs::read(&identity.certificate)?)?)
     }
 
     pub fn get_local_component_of_kind(&self, kind: &str) -> Option<ComponentId> {
@@ -270,14 +224,34 @@ impl Common {
     }
 
     /// Convenience function to initialize symbology from [Common]
-    pub async fn start_symbology(&self, write: bool) -> crate::symbology::client::Client {
-        crate::symbology::client::Client::start(
+    pub async fn start_symbology(
+        &self,
+        write: bool,
+    ) -> Option<crate::symbology::client::Client> {
+        if self.config.no_symbology {
+            return None;
+        }
+        let client = crate::symbology::client::Client::start(
             self.subscriber.clone(),
             self.paths.sym(),
             None,
             write,
         )
-        .await
+        .await;
+        Some(client)
+    }
+
+    pub async fn start_external_symbology(&self) -> Result<()> {
+        let mut external_symbology = self.external_symbology.lock().await;
+        for (cpty, url) in self.config.external_marketdata.iter() {
+            let cpty: CptyId = cpty.parse()?;
+            let url: Url = url.parse()?;
+            let client =
+                crate::symbology::external_client::ExternalSymbologyClient::start(url);
+            client.synced().wait_synced(None).await?;
+            external_symbology.insert(cpty, client);
+        }
+        Ok(())
     }
 
     pub fn channel_driver(&self) -> ChannelDriverBuilder {
@@ -291,6 +265,8 @@ pub struct CommonInner {
     pub config_path: Option<PathBuf>,
     /// A copy of the raw config file
     pub config: Config,
+    /// Self-identification (certificate subject if TLS, or None)
+    pub identity: Option<UserId>,
     /// The netidx config used to build the publisher and subscriber
     pub netidx_config: NetidxConfig,
     /// The location of the netidx config that was used, if not the default
@@ -309,4 +285,10 @@ pub struct CommonInner {
     pub paths: Paths,
     /// Optional admin_stats support
     pub stats: OnceCell<AdminStats>,
+    /// External symbology subscriptions
+    pub external_symbology: Mutex<
+        FxHashMap<CptyId, crate::symbology::external_client::ExternalSymbologyClient>,
+    >,
+    /// External marketdata source config
+    pub external_marketdata: FxHashMap<CptyId, Url>,
 }

@@ -1,5 +1,5 @@
 use crate::{
-    symbology::{Cpty, Route, Venue},
+    symbology::{Cpty, RouteRef, VenueRef},
     Common,
 };
 use anyhow::Result;
@@ -17,7 +17,7 @@ use netidx_protocols::{call_rpc, rpc::client::Proc};
 pub struct RfqClient {
     common: Common,
     subs: FxHashMap<SubId, Dval>,
-    index: FxHashMap<(Venue, Route, RfqRequest), SubId>,
+    index: FxHashMap<(VenueRef, RouteRef, RfqRequest), SubId>,
     tx: mpsc::Sender<Pooled<Vec<(SubId, Event)>>>,
     rx: mpsc::Receiver<Pooled<Vec<(SubId, Event)>>>,
 }
@@ -73,8 +73,8 @@ impl RfqClient {
     /// parameters if one exists.
     pub async fn subscribe_rfq(
         &mut self,
-        venue: Venue,
-        route: Route,
+        venue: VenueRef,
+        route: RouteRef,
         rfq: RfqRequest,
         reuse_existing: bool,
     ) -> Result<()> {

@@ -16,7 +16,7 @@ use netidx_protocols::{call_rpc, rpc::client::Proc};
 
 pub async fn get(
     common: &Common,
-    market: symbology::Market,
+    market: symbology::MarketRef,
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     width: CandleWidth,
@@ -35,7 +35,7 @@ pub async fn get(
             }
         }
     }
-    let live_base = common.paths.marketdata_ohlc_by_name(market, true);
+    let live_base = common.paths.marketdata_ohlc_by_name(market, true, false);
     debug!(
         "requesting historical {} candles for {}: from {} to {} via {}",
         width.as_str(),

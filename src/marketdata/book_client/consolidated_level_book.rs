@@ -1,4 +1,4 @@
-use crate::symbology::Market;
+use crate::symbology::MarketRef;
 use api::{
     marketdata::{Snapshot, Update, Updates},
     pool, Dir, DirPair,
@@ -17,7 +17,7 @@ use std::{
 #[derive(Clone, Debug)]
 pub struct ConsolidatedLevel {
     pub total: Decimal,
-    pub sizes: FxHashMap<Market, Decimal>,
+    pub sizes: FxHashMap<MarketRef, Decimal>,
 }
 
 impl ConsolidatedLevel {
@@ -78,7 +78,7 @@ impl ConsolidatedLevelBook {
         self.sell.clear();
     }
 
-    fn clear_one_from_dir(&mut self, market: Market, dir: Dir) {
+    fn clear_one_from_dir(&mut self, market: MarketRef, dir: Dir) {
         let mut levels_to_remove: Vec<Decimal> = Vec::new();
         let side = self.get_mut(dir);
         side.iter_mut().for_each(|(price, level)| match level.sizes.remove(&market) {
@@ -95,19 +95,19 @@ impl ConsolidatedLevelBook {
         });
     }
 
-    pub fn clear_one(&mut self, market: Market) {
+    pub fn clear_one(&mut self, market: MarketRef) {
         self.clear_one_from_dir(market, Dir::Buy);
         self.clear_one_from_dir(market, Dir::Sell);
     }
 
-    pub fn upsert(&mut self, market: Market, dir: Dir, price: Decimal, size: Decimal) {
+    pub fn upsert(&mut self, market: MarketRef, dir: Dir, price: Decimal, size: Decimal) {
         let side = self.get_mut(dir);
         let level = side.entry(price).or_insert_with(|| ConsolidatedLevel::new());
         let existing_size = level.sizes.insert(market, size).unwrap_or(Decimal::ZERO);
         level.total += size - existing_size;
     }
 
-    pub fn remove(&mut self, market: Market, dir: Dir, price: Decimal) {
+    pub fn remove(&mut self, market: MarketRef, dir: Dir, price: Decimal) {
         let side = self.get_mut(dir);
         let level = side.entry(price).or_insert_with(|| ConsolidatedLevel::new());
         let existing_size = level.sizes.remove(&market).unwrap_or(Decimal::ZERO);
@@ -119,7 +119,7 @@ impl ConsolidatedLevelBook {
 
     pub(super) fn update_from_snapshot(
         &mut self,
-        market: Market,
+        market: MarketRef,
         mut snapshot: Snapshot,
     ) {
         self.clear_one(market);
@@ -131,7 +131,7 @@ impl ConsolidatedLevelBook {
         }
     }
 
-    pub(super) fn update(&mut self, market: Market, mut updates: Updates) {
+    pub(super) fn update(&mut self, market: MarketRef, mut updates: Updates) {
         for up in updates.book.buy.drain(..) {
             match up {
                 Update::Change { price, size } => {
@@ -213,7 +213,7 @@ pub struct CondensedLevel {
     /// total size available at this level and all the levels above
     pub total: Decimal,
     /// tradable products in this level
-    pub markets: Pooled<Vec<Market>>,
+    pub markets: Pooled<Vec<MarketRef>>,
 }
 
 fn condense_from_levels<'a>(
@@ -223,7 +223,7 @@ fn condense_from_levels<'a>(
     precision: Decimal,
     dir: Dir,
 ) {
-    pool!(pool_markets, Vec<Market>, 1000, 100);
+    pool!(pool_markets, Vec<MarketRef>, 1000, 100);
     let mut total = Decimal::ZERO;
     let group = |price: Decimal| {
         let n = price / precision;
@@ -240,7 +240,7 @@ fn condense_from_levels<'a>(
             .take(num_levels)
             .map(|(price, levels)| {
                 let mut size = Decimal::ZERO;
-                let mut markets_set: FxHashSet<Market> = FxHashSet::default();
+                let mut markets_set: FxHashSet<MarketRef> = FxHashSet::default();
                 levels.for_each(|(_, level)| {
                     size += level.total;
                     markets_set.extend(level.sizes.keys());

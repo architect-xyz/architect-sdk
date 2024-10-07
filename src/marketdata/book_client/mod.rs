@@ -1,6 +1,6 @@
 //! Subscribe to book data
 
-use crate::{symbology::Market, synced::Synced};
+use crate::{symbology::MarketRef, synced::Synced};
 use anyhow::{anyhow, bail, Result};
 use api::marketdata::{MessageHeader, NetidxFeedPaths, Snapshot, Updates};
 use consolidated_level_book::ConsolidatedLevelBook;
@@ -23,7 +23,7 @@ pub use level_book::*;
 /// A subscription to book data
 pub struct BookClient {
     book: LevelBook,
-    market: Market,
+    market: MarketRef,
     subscription: Dval,
     synced: u64,
     tx_updates: watch::Sender<u64>,
@@ -46,7 +46,7 @@ impl BookClient {
         subscriber: &Subscriber,
         path: &Path,
         _display: bool,
-        market: Market,
+        market: MarketRef,
         up: mpsc::Sender<Pooled<Vec<(SubId, Event)>>>,
     ) -> Self {
         // let base =
@@ -79,7 +79,7 @@ impl BookClient {
         &self.book
     }
 
-    pub fn market(&self) -> &Market {
+    pub fn market(&self) -> &MarketRef {
         &self.market
     }
 
@@ -126,7 +126,7 @@ impl BookClient {
 /// Subscriptions to multiple books consolidated into one
 pub struct ConsolidatedBookClient {
     consolidated_book: ConsolidatedLevelBook,
-    books: FxHashMap<SubId, (Market, BookClient)>,
+    books: FxHashMap<SubId, (MarketRef, BookClient)>,
 }
 
 impl Deref for ConsolidatedBookClient {
@@ -145,10 +145,10 @@ impl ConsolidatedBookClient {
         subscriber: &Subscriber,
         base_path: &Path,
         display: bool,
-        markets: Vec<Market>,
+        markets: Vec<MarketRef>,
         up: mpsc::Sender<Pooled<Vec<(SubId, Event)>>>,
     ) -> Self {
-        let mut books: FxHashMap<SubId, (Market, BookClient)> = FxHashMap::default();
+        let mut books: FxHashMap<SubId, (MarketRef, BookClient)> = FxHashMap::default();
         markets.iter().for_each(|m| {
             let path = m.path_by_name(base_path).append("book");
             let client = BookClient::new(subscriber, &path, display, *m, up.clone());
