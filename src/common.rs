@@ -30,6 +30,25 @@ impl Deref for Common {
 impl Common {
     pub async fn from_config(config_path: Option<PathBuf>, f: Config) -> Result<Self> {
         let config = f.clone();
+        let tls = if let Some(tls_config) = &config.tls_config {
+            let cert =
+                tokio::fs::read(&tls_config.certificate).await.with_context(|| {
+                    format!("reading {}", tls_config.certificate.display())
+                })?;
+            let key =
+                tokio::fs::read(&tls_config.private_key).await.with_context(|| {
+                    format!("reading {}", tls_config.private_key.display())
+                })?;
+            let trusted = tokio::fs::read(&tls_config.trusted)
+                .await
+                .with_context(|| format!("reading {}", tls_config.trusted.display()))?;
+            Some(Tls {
+                identity: tonic::transport::Identity::from_pem(&cert, &key),
+                trusted: tonic::transport::Certificate::from_pem(&trusted),
+            })
+        } else {
+            None
+        };
         let netidx_config = task::block_in_place(|| match &f.netidx_config {
             None => {
                 debug!("loading default netidx config");
@@ -107,6 +126,7 @@ impl Common {
             config_path,
             config,
             identity,
+            tls,
             netidx_config,
             netidx_config_path: f.netidx_config,
             desired_auth,
@@ -260,6 +280,12 @@ impl Common {
 }
 
 #[derive(Debug)]
+pub struct Tls {
+    pub identity: tonic::transport::Identity,
+    pub trusted: tonic::transport::Certificate,
+}
+
+#[derive(Debug)]
 pub struct CommonInner {
     /// The path to the config that was loaded
     pub config_path: Option<PathBuf>,
@@ -267,6 +293,8 @@ pub struct CommonInner {
     pub config: Config,
     /// Self-identification (certificate subject if TLS, or None)
     pub identity: Option<UserId>,
+    /// mTLS for gRPC
+    pub tls: Option<Tls>,
     /// The netidx config used to build the publisher and subscriber
     pub netidx_config: NetidxConfig,
     /// The location of the netidx config that was used, if not the default
