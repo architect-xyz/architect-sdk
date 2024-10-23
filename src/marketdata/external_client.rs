@@ -34,11 +34,11 @@ impl ExternalMarketdataClient {
     }
 
     pub async fn poll_snapshot(&mut self) -> Result<()> {
-        let res: L2BookSnapshot = self
+        let res: ExternalL2BookSnapshot = self
             .driver
             .query(
                 "marketdata/book/l2/snapshot",
-                Some(QueryL2BookSnapshot { market_id: self.market.id }),
+                Some(QueryExternalL2BookSnapshot { market_id: self.market.id }),
             )
             .await?;
         self.book.clear();
