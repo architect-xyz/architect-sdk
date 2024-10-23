@@ -56,6 +56,7 @@ pub struct TickerClient {
     pub low_24h: Client<Decimal>,
     pub high_24h: Client<Decimal>,
     pub volume_30d: Client<Decimal>,
+    pub open_interest: Client<Decimal>,
     sub_ids: FxHashSet<SubId>,
 }
 
@@ -72,17 +73,28 @@ impl TickerClient {
         let high_24h = Client::new(subscriber, up.clone(), base_path.append("high_24h"));
         let volume_30d =
             Client::new(subscriber, up.clone(), base_path.append("volume_30d"));
+        let open_interest =
+            Client::new(subscriber, up.clone(), base_path.append("open_interest"));
         let sub_ids: FxHashSet<SubId> = [
             open_24h.sub_id,
             volume_24h.sub_id,
             low_24h.sub_id,
             high_24h.sub_id,
             volume_30d.sub_id,
+            open_interest.sub_id,
         ]
         .iter()
         .cloned()
         .collect();
-        Self { open_24h, volume_24h, low_24h, high_24h, volume_30d, sub_ids }
+        Self {
+            open_24h,
+            volume_24h,
+            low_24h,
+            high_24h,
+            volume_30d,
+            open_interest,
+            sub_ids,
+        }
     }
 
     pub fn process_event(&mut self, sub_id: SubId, ev: Event) -> Result<()> {
