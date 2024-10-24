@@ -1,5 +1,7 @@
+use anyhow::{anyhow, Result};
 /// Order book representation
 use api::{
+    external::marketdata::SequenceIdAndNumber,
     marketdata::{Snapshot, Update, Updates},
     pool, Dir, DirPair,
 };
@@ -80,7 +82,7 @@ impl<'a> Iterator for LevelIterator<'a> {
 }
 
 /// An order book
-#[derive(Debug, Pack)]
+#[derive(Debug, Clone, Pack)]
 pub struct LevelBook {
     pub book: DirPair<BTreeMap<Decimal, Decimal>>,
     pub timestamp: DateTime<Utc>,
@@ -214,6 +216,34 @@ impl LevelBook {
             Dir::Sell,
         );
         dst
+    }
+
+    pub fn to_l2_book_snapshot(
+        &self,
+        sequence: SequenceIdAndNumber,
+    ) -> api::external::marketdata::L2BookSnapshot {
+        let bids = self.iter_levels(Dir::Buy).map(|(p, q)| (*p, *q)).collect::<Vec<_>>();
+        let asks = self.iter_levels(Dir::Sell).map(|(p, q)| (*p, *q)).collect::<Vec<_>>();
+        api::external::marketdata::L2BookSnapshot::new(
+            self.timestamp,
+            sequence,
+            bids,
+            asks,
+        )
+    }
+
+    pub fn of_l2_book_snapshot(
+        snapshot: api::external::marketdata::L2BookSnapshot,
+    ) -> Result<Self> {
+        let timestamp =
+            snapshot.timestamp().ok_or(anyhow!("BUG: Snapshot timestamp is invalid"))?;
+        Ok(Self {
+            book: DirPair {
+                buy: snapshot.bids.into_iter().collect(),
+                sell: snapshot.asks.into_iter().collect(),
+            },
+            timestamp,
+        })
     }
 }
 

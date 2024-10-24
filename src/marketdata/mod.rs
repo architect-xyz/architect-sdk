@@ -2,6 +2,7 @@
 pub mod book_client;
 #[cfg(feature = "netidx")]
 pub mod external_client;
+pub mod grpc_client;
 #[cfg(feature = "netidx")]
 pub mod historical_candles;
 #[cfg(feature = "netidx")]
