@@ -8,11 +8,22 @@ version = "0.1.0"
 name = "subscribe_l1_book_snapshots"
 path = "subscribe_l1_book_snapshots.rs"
 
+[[bin]]
+name = "subscribe_candles"
+path = "subscribe_candles.rs"
+
+[[bin]]
+name = "subscribe_trades"
+path = "subscribe_trades.rs"
+
+
 [dependencies]
 anyhow = { workspace = true }
-architect-api = { package = "architect-api", version = "2", path = "../../api" }
+api = { package = "architect-api", version = "2", path = "../../api", features = [
+    "netidx",
+    "postgres",
+] }
 architect-sdk = { package = "architect-sdk", version = "2", path = ".." }
 clap = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
-
