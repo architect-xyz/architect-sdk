@@ -272,11 +272,11 @@ impl Paths {
             .get(&com)
             .ok_or_else(|| anyhow!("BUG: unknown component kind for {}", com))?;
         let base = if self.local_components.contains(&com) {
-            self.local_base.clone()
+            self.core_base.clone()
         } else if let Some(_base) = self.remote_components.get(&com) {
             // CR alee: not really correct...need to rethink config as a whole
             // in context with rsync and core_id
-            self.local_base.clone()
+            self.core_base.clone()
             // base.dirname().ok_or_else("BUG: remote component path has no parent")?
         } else {
             bail!("BUG: unknown component {}", com);
