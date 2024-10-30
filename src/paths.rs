@@ -14,7 +14,6 @@ pub struct Paths {
     pub remote_components: FxHashMap<ComponentId, Path>,
     pub component_kind: FxHashMap<ComponentId, String>,
     pub use_local_symbology: bool,
-    pub use_local_licensedb: bool,
     pub use_local_marketdata: FxHashSet<CptyId>,
     pub use_legacy_marketdata: FxHashSet<CptyId>,
     pub use_legacy_hist_marketdata: FxHashSet<CptyId>,
@@ -285,12 +284,5 @@ impl Paths {
             base.append("components").append(&com.to_string()),
             base.append("components").append(kind).append(&com.to_string()),
         ))
-    }
-
-    /// License server
-    pub fn licensedb(&self) -> Path {
-        let base =
-            if self.use_local_licensedb { &self.local_base } else { &self.hosted_base };
-        base.append("licensedb")
     }
 }

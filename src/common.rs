@@ -142,7 +142,6 @@ impl Common {
                 remote_components,
                 component_kind,
                 use_local_symbology: f.use_local_symbology,
-                use_local_licensedb: f.use_local_licensedb,
                 use_local_marketdata,
                 use_legacy_marketdata,
                 use_legacy_hist_marketdata,

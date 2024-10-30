@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-/// Order book representation
 use api::{
     external::marketdata::SequenceIdAndNumber,
     marketdata::{Snapshot, Update, Updates},
