@@ -13,6 +13,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    env_logger::init();
     let cli = Cli::parse();
     if cli.endpoints.is_empty() {
         println!("no endpoints specified");

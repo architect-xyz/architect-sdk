@@ -4,9 +4,9 @@ pub mod book_client;
 pub mod external_client;
 // CR alee: need to untangle some deps here
 #[cfg(feature = "netidx")]
-pub mod grpc_client;
-#[cfg(feature = "netidx")]
 pub mod historical_candles;
+#[cfg(feature = "netidx")]
+pub mod l2_client;
 #[cfg(feature = "netidx")]
 pub mod managed_marketdata;
 #[cfg(feature = "netidx")]

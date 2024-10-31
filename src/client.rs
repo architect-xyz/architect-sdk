@@ -11,6 +11,7 @@ use api::{
 };
 #[cfg(feature = "grpc")]
 use hickory_resolver::{config::*, TokioAsyncResolver};
+use std::net::SocketAddr;
 #[cfg(feature = "grpc")]
 use tonic::codec::Streaming;
 
@@ -19,14 +20,20 @@ pub struct ArchitectClient {}
 
 impl ArchitectClient {
     #[cfg(feature = "grpc")]
-    pub async fn resolve_service(&self, domain_name: &str) -> Result<String> {
+    pub async fn resolve_service(&self, endpoint: &str) -> Result<String> {
+        // CR alee: also check for localhost, and parse as Url first
+        // CR alee: preserve http/https scheme if present, default to http 
+        // if the endpoint is already an IP address, return it as is
+        if let Ok(_) = endpoint.parse::<SocketAddr>() {
+            return Ok(format!("dns://{endpoint}"));
+        }
         let resolver =
             TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default());
-        let records = resolver.srv_lookup(domain_name).await?;
+        let records = resolver.srv_lookup(endpoint).await?;
         let rec = records
             .iter()
             .next()
-            .ok_or_else(|| anyhow!("no SRV records found for domain: {domain_name}"))?;
+            .ok_or_else(|| anyhow!("no SRV records found for domain: {endpoint}"))?;
         Ok(format!("dns://{}:{}", rec.target(), rec.port()))
     }
 
