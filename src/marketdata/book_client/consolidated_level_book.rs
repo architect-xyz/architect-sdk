@@ -118,11 +118,7 @@ impl ConsolidatedLevelBook {
         }
     }
 
-    pub(super) fn update_from_snapshot(
-        &mut self,
-        market: MarketRef,
-        mut snapshot: Snapshot,
-    ) {
+    pub fn update_from_snapshot(&mut self, market: MarketRef, mut snapshot: Snapshot) {
         self.clear_one(market);
         for (price, size) in snapshot.book.buy.drain(..) {
             self.upsert(market, Dir::Buy, price, size);
@@ -132,7 +128,7 @@ impl ConsolidatedLevelBook {
         }
     }
 
-    pub(super) fn update(&mut self, market: MarketRef, mut updates: Updates) {
+    pub fn update(&mut self, market: MarketRef, mut updates: Updates) {
         for up in updates.book.buy.drain(..) {
             match up {
                 Update::Change { price, size } => {

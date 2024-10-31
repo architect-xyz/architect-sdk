@@ -2,10 +2,9 @@ use super::{
     market::*, product::*, route::*, venue::*, MarketIndex, StaticRef, GLOBAL_INDEX,
 };
 use anyhow::{anyhow, bail, Result};
-#[cfg(feature = "netidx")]
-use api::{pool, symbology::SymbologyUpdateKind};
 use api::{
-    symbology::{MarketId, ProductId, RouteId, VenueId},
+    pool,
+    symbology::{MarketId, ProductId, RouteId, SymbologyUpdateKind, VenueId},
     utils::pool::Pooled,
     Str,
 };
@@ -648,7 +647,6 @@ impl Txn {
         }
     }
 
-    #[cfg(feature = "netidx")]
     fn dump_product(
         &self,
         pset: &mut FxHashSet<ProductRef>,
@@ -667,7 +665,6 @@ impl Txn {
     }
 
     /// dump the current symbology as of Txn to a series of symbology updates
-    #[cfg(feature = "netidx")]
     pub fn dump(&self) -> Pooled<Vec<SymbologyUpdateKind>> {
         pool!(pool_pset, FxHashSet<ProductRef>, 2, 1_000_000);
         pool!(pool_update, Vec<SymbologyUpdateKind>, 2, 1_000_000);

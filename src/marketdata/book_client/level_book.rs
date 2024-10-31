@@ -8,6 +8,7 @@ use api::{
 };
 use chrono::prelude::*;
 use itertools::Itertools;
+#[cfg(feature = "netidx")]
 use netidx_derive::Pack;
 use rust_decimal::Decimal;
 use std::{
@@ -82,7 +83,8 @@ impl<'a> Iterator for LevelIterator<'a> {
 }
 
 /// An order book
-#[derive(Debug, Clone, Pack)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "netidx", derive(Pack))]
 pub struct LevelBook {
     pub book: DirPair<BTreeMap<Decimal, Decimal>>,
     pub timestamp: DateTime<Utc>,
@@ -119,7 +121,7 @@ impl LevelBook {
         self.buy.is_empty() && self.sell.is_empty()
     }
 
-    pub(super) fn update_from_snapshot(&mut self, mut snapshot: Snapshot) {
+    pub fn update_from_snapshot(&mut self, mut snapshot: Snapshot) {
         self.buy.clear();
         self.sell.clear();
         for (price, size) in snapshot.book.buy.drain(..) {
@@ -131,7 +133,7 @@ impl LevelBook {
         self.timestamp = snapshot.timestamp;
     }
 
-    pub(super) fn update(&mut self, mut updates: Updates) {
+    pub fn update(&mut self, mut updates: Updates) {
         for up in updates.book.buy.drain(..) {
             match up {
                 Update::Change { price, size } => {
