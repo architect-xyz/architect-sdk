@@ -10,10 +10,13 @@ use netidx::{
     subscriber::{DesiredAuth, Subscriber},
 };
 use once_cell::sync::OnceCell;
+use openssl::{
+    pkey::{PKey, Private, Public},
+    rsa::Rsa,
+};
 use std::{fs, ops::Deref, path::PathBuf, str::FromStr, sync::Arc};
 use tokio::{sync::Mutex, task};
 use url::Url;
-
 /// Common data and functionality shared by most everything in the core,
 /// derived from the config.  
 #[derive(Debug, Clone)]
@@ -275,6 +278,22 @@ impl Common {
 
     pub fn channel_driver(&self) -> ChannelDriverBuilder {
         ChannelDriverBuilder::new(self)
+    }
+
+    #[cfg(feature = "netidx")]
+    pub fn netidx_tls_identity(&self) -> Result<Option<(PKey<Public>, Rsa<Private>)>> {
+        if let Some((tls, identity)) = tls::netidx_tls_identity(&self.netidx_config) {
+            let public_key =
+                tls::netidx_tls_identity_certificate(identity)?.public_key()?;
+            let private_key = tls::netidx_tls_identity_privkey(tls, identity)?;
+            Ok(Some((public_key, private_key)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn secrets_override_path(&self) -> Option<&std::path::Path> {
+        self.config.secrets_path_override.as_ref().map(|p| std::path::Path::new(p))
     }
 }
 
