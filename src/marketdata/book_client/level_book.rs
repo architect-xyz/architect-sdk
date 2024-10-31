@@ -2,11 +2,12 @@ use anyhow::{anyhow, Result};
 use api::{
     external::marketdata::SequenceIdAndNumber,
     marketdata::{Snapshot, Update, Updates},
-    pool, Dir, DirPair,
+    pool,
+    utils::pool::Pooled,
+    Dir, DirPair,
 };
 use chrono::prelude::*;
 use itertools::Itertools;
-use netidx::pool::Pooled;
 use netidx_derive::Pack;
 use rust_decimal::Decimal;
 use std::{

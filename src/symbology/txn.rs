@@ -6,6 +6,7 @@ use anyhow::{anyhow, bail, Result};
 use api::{pool, symbology::SymbologyUpdateKind};
 use api::{
     symbology::{MarketId, ProductId, RouteId, VenueId},
+    utils::pool::Pooled,
     Str,
 };
 #[cfg(feature = "netidx")]
@@ -16,7 +17,7 @@ use log::warn;
 #[cfg(feature = "netidx")]
 use md5::{Digest, Md5};
 #[cfg(feature = "netidx")]
-use netidx::{pack::Pack, pool::Pooled};
+use netidx::pack::Pack;
 use parking_lot::{Mutex, MutexGuard};
 use smallvec::SmallVec;
 #[cfg(feature = "netidx")]

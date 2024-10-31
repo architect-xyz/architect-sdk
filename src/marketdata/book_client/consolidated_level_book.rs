@@ -1,12 +1,13 @@
 use crate::symbology::MarketRef;
 use api::{
     marketdata::{Snapshot, Update, Updates},
-    pool, Dir, DirPair,
+    pool,
+    utils::pool::Pooled,
+    Dir, DirPair,
 };
 use chrono::prelude::*;
 use fxhash::{FxHashMap, FxHashSet};
 use itertools::Itertools;
-use netidx_core::pool::Pooled;
 use rust_decimal::Decimal;
 use std::{
     collections::{btree_map::Iter, BTreeMap},
