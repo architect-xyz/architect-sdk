@@ -4,6 +4,9 @@ use anyhow::{bail, Result};
 use std::time::Duration;
 use tokio::sync::watch;
 
+// CR alee: switch the names of the Handle/non-Handle structs, and maybe
+// reconsider the names of the methods and such.  This is really a thin
+// layer over watch.
 #[derive(Debug, Clone)]
 pub struct SyncHandle<T>(watch::Sender<T>);
 
@@ -22,6 +25,7 @@ impl<T> SyncHandle<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct Synced<T>(pub watch::Receiver<T>);
 
 impl<T> Synced<T> {
@@ -46,6 +50,10 @@ impl<T> Synced<T> {
 }
 
 impl Synced<bool> {
+    pub fn is_synced(&self) -> bool {
+        *self.0.borrow()
+    }
+
     pub async fn wait_synced(&mut self, timeout: Option<Duration>) -> Result<()> {
         self.wait_synced_with(timeout, |v| *v).await
     }

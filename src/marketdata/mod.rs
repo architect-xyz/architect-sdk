@@ -6,6 +6,8 @@ pub mod external_client;
 pub mod historical_candles;
 #[cfg(feature = "grpc")]
 pub mod l2_client;
+#[cfg(feature = "grpc")]
+pub mod managed_l2_clients;
 #[cfg(feature = "netidx")]
 pub mod managed_marketdata;
 #[cfg(feature = "netidx")]

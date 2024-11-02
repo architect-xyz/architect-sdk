@@ -20,6 +20,9 @@ path = "subscribe_candles.rs"
 name = "subscribe_trades"
 path = "subscribe_trades.rs"
 
+[[bin]]
+name = "use_managed_marketdata"
+path = "use_managed_marketdata.rs"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -31,4 +34,5 @@ architect-sdk = { package = "architect-sdk", version = "2", path = ".." }
 clap = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }
+log = { workspace = true }
 tokio = { workspace = true }

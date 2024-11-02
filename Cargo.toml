@@ -71,6 +71,7 @@ smallvec = { workspace = true }
 sysinfo = { workspace = true, optional = true }
 time = { workspace = true }
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 tokio-tungstenite = { workspace = true }
 tonic = { workspace = true, optional = true }
 url = { workspace = true }
