@@ -32,6 +32,7 @@ pub struct ManagedL2Clients {
     tx_subs: mpsc::Sender<SubscribeOrUnsubscribe<MarketId>>,
     rx_subs: mpsc::Receiver<SubscribeOrUnsubscribe<MarketId>>,
     cooldown_before_unsubscribe: Option<Duration>,
+    cooldown_max_tasks: usize,
     cooler: FuturesUnordered<Pin<Box<dyn Future<Output = L2ClientHandle> + Send>>>,
 }
 
@@ -61,6 +62,7 @@ impl ManagedL2Clients {
             tx_subs,
             rx_subs,
             cooldown_before_unsubscribe: None,
+            cooldown_max_tasks: 1024,
             cooler,
         }
     }
@@ -73,6 +75,13 @@ impl ManagedL2Clients {
     // #[cfg(feature = "tokio")]
     pub fn set_cooldown_before_unsubscribe(&mut self, duration: Duration) {
         self.cooldown_before_unsubscribe = Some(duration);
+    }
+
+    /// Set the maximum number of subscriptions to cooldown.  The next
+    /// subscription after the max will drop immediately without respecting
+    /// the cooldown period.
+    pub fn set_cooldown_max_tasks(&mut self, max_tasks: usize) {
+        self.cooldown_max_tasks = max_tasks;
     }
 
     pub fn handle(&self) -> ManagedL2ClientsHandle {
@@ -177,20 +186,22 @@ impl ManagedL2Clients {
             // (2) in self.updates
             // (3) in the cloned StreamKey here
             if let Some(cooldown_period) = self.cooldown_before_unsubscribe {
-                // to ensure we only cooler a subscription once,
-                // clone the handle to bump its weak count, holding
-                // it inside a timer task.  the driver will end up
-                // either retaining it, or unsubscribing it.
-                // #[cfg(feature = "tokio")]
-                let handle = key.handle.clone();
-                self.cooler.push(Box::pin(async move {
-                    tokio::time::sleep(cooldown_period).await;
-                    handle
-                }));
-            } else {
-                self.unsubscribe(key.market_id);
-                return;
+                if self.cooler.len() < self.cooldown_max_tasks {
+                    // to ensure we only cooler a subscription once,
+                    // clone the handle to bump its weak count, holding
+                    // it inside a timer task.  the driver will end up
+                    // either retaining it, or unsubscribing it.
+                    // #[cfg(feature = "tokio")]
+                    let handle = key.handle.clone();
+                    self.cooler.push(Box::pin(async move {
+                        tokio::time::sleep(cooldown_period).await;
+                        handle
+                    }));
+                    return;
+                }
             }
+            self.unsubscribe(key.market_id);
+            return;
         }
         let up = match up {
             Ok(up) => up,
