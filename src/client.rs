@@ -22,7 +22,7 @@ impl ArchitectClient {
     #[cfg(feature = "grpc")]
     pub async fn resolve_service(&self, endpoint: &str) -> Result<String> {
         // CR alee: also check for localhost, and parse as Url first
-        // CR alee: preserve http/https scheme if present, default to http 
+        // CR alee: preserve http/https scheme if present, default to http
         // if the endpoint is already an IP address, return it as is
         if let Ok(_) = endpoint.parse::<SocketAddr>() {
             return Ok(format!("dns://{endpoint}"));
