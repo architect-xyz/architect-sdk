@@ -1,6 +1,6 @@
 use super::level_book::LevelBook;
 use crate::{symbology::MarketRef, synced::Synced};
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use api::marketdata::{MessageHeader, Snapshot, Updates};
 use futures::channel::mpsc;
 use log::trace;
@@ -88,11 +88,13 @@ impl BookClient {
     pub fn process_event(&mut self, ev: Event) -> Result<()> {
         match ev {
             Event::Update(Value::Bytes(mut buf)) => {
-                let typ: MessageHeader = Pack::decode(&mut buf)?;
+                let typ: MessageHeader =
+                    Pack::decode(&mut buf).with_context(|| "invalid message header")?;
                 match typ {
                     MessageHeader::Updates => {
                         if self.synced > 0 {
-                            let updates: Updates = Pack::decode(&mut buf)?;
+                            let updates: Updates = Pack::decode(&mut buf)
+                                .with_context(|| "invalid book update")?;
                             trace!("book updates: {:?}", updates);
                             self.book.update(updates);
                             self.synced += 1;
@@ -100,7 +102,8 @@ impl BookClient {
                         }
                     }
                     MessageHeader::Snapshot => {
-                        let snap: Snapshot = Pack::decode(&mut buf)?;
+                        let snap: Snapshot = Pack::decode(&mut buf)
+                            .with_context(|| "invalid book snapshot")?;
                         trace!("book snap: {:?}", snap);
                         self.book.update_from_snapshot(snap);
                         self.synced = 1;
