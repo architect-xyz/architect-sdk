@@ -33,7 +33,7 @@ impl Deref for Common {
 impl Common {
     pub async fn from_config(config_path: Option<PathBuf>, f: Config) -> Result<Self> {
         let config = f.clone();
-        let tls = if let Some(tls_config) = &config.tls_config {
+        let tls = if let Some(tls_config) = &config.tls {
             let cert =
                 tokio::fs::read(&tls_config.certificate).await.with_context(|| {
                     format!("reading {}", tls_config.certificate.display())
