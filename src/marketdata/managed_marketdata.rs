@@ -101,8 +101,10 @@ impl ManagedMarketdata {
             let book_handles = book_handles.clone();
             let rfq_handles = rfq_handles.clone();
             let dval_handles = dval_handles.clone();
+            let mut sub_ids_to_remove = Vec::new();
+            let mut markets_to_remove = Vec::new();
             let f = async move {
-                'outer: while let Some(mut batch) = rx.next().await {
+                while let Some(mut batch) = rx.next().await {
                     let mut book_handles = book_handles.lock().await;
                     let mut rfq_handles = rfq_handles.lock().await;
                     let mut dval_handles = dval_handles.lock().await;
@@ -110,9 +112,12 @@ impl ManagedMarketdata {
                         if let Some(book) =
                             book_handles.by_sub_id.get_mut(&id).and_then(|w| w.upgrade())
                         {
-                            if let Err(e) = book.lock().await.process_event(event) {
+                            let mut book = book.lock().await;
+                            if let Err(e) = book.process_event(event) {
+                                let market = book.market();
                                 error!("error processing book event: {}", e);
-                                break 'outer;
+                                sub_ids_to_remove.push(id);
+                                markets_to_remove.push(*market);
                             }
                         } else if let Some(handle) =
                             dval_handles.by_sub_id.get_mut(&id).and_then(|w| w.upgrade())
@@ -150,6 +155,12 @@ impl ManagedMarketdata {
                                 }
                             }
                         }
+                    }
+                    for market in markets_to_remove.drain(..) {
+                        book_handles.by_market.remove(&market);
+                    }
+                    for id in sub_ids_to_remove.drain(..) {
+                        book_handles.by_sub_id.remove(&id);
                     }
                 }
                 warn!("subscription driver terminated");
