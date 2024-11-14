@@ -21,8 +21,8 @@ async fn main() -> Result<()> {
     let Cli { endpoint, market } = Cli::parse();
     let client = ArchitectClient::default();
     println!("Resolving service {endpoint}...");
-    let endpoint = client.resolve_service(&endpoint).await?;
-    println!("Connecting to endpoint: {endpoint}");
+    let endpoint = client.resolve_service(endpoint.as_str()).await?;
+    println!("Connecting to endpoint: {}", endpoint.uri());
     let mut l2_client = L2Client::connect(endpoint, market).await?;
     println!("Subscribed");
     let mut print_interval = tokio::time::interval(Duration::from_secs(1));

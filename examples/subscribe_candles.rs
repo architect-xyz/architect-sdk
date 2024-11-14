@@ -33,15 +33,15 @@ async fn subscribe_to_one_stream(
     market_id: &str,
     candle_width: &str,
 ) -> Result<()> {
-    let mut client = ArchitectClient::default();
+    let client = ArchitectClient::default();
     let endpoint = if let Some(endpoints) = endpoints {
         let endpoint = &endpoints[0];
         println!("Resolving service {endpoint}...");
-        client.resolve_service(endpoint).await?
+        client.resolve_service(endpoint.as_str()).await?
     } else {
-        "http://localhost:7777".to_owned()
+        unimplemented!()
     };
-    println!("Connecting to endpoint: {endpoint}");
+    println!("Connecting to endpoint: {}", endpoint.uri());
     println!("Loading symbology...");
     client.load_symbology_from(&endpoint).await?;
     let market_id = MarketId::from_str(market_id)?;

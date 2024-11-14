@@ -27,10 +27,10 @@ async fn main() -> Result<()> {
 
 /// Demonstrate subscribing to a single marketdata stream
 async fn subscribe_to_one_stream(endpoint: &str) -> Result<()> {
-    let mut client = ArchitectClient::default();
+    let client = ArchitectClient::default();
     println!("Resolving service {endpoint}...");
     let endpoint = client.resolve_service(endpoint).await?;
-    println!("Connecting to endpoint: {endpoint}");
+    println!("Connecting to endpoint: {}", endpoint.uri());
     println!("Loading symbology...");
     client.load_symbology_from(&endpoint).await?;
     println!("Subscribing to marketdata...");
@@ -68,8 +68,8 @@ async fn subscribe_to_multiple_streams<S: AsRef<str>>(
         let endpoint = endpoint.clone();
         tokio::task::spawn(async move {
             let mut stream = {
-                let mut client = client.lock().await;
-                client.subscribe_l1_book_snapshots_from(endpoint, None).await?
+                let client = client.lock().await;
+                client.subscribe_l1_book_snapshots_from(&endpoint, None).await?
             };
             while let Some(res) = stream.next().await {
                 let snap = res?;

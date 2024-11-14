@@ -10,9 +10,25 @@ license = "AGPL-3.0-only"
 name = "architect-sdk"
 version = "2.10.1"
 
+[[example]]
+name = "subscribe_candles"
+
+[[example]]
+name = "subscribe_l1_book_snapshots"
+
+[[example]]
+name = "subscribe_l2_book"
+
+[[example]]
+name = "subscribe_trades"
+
+[[example]]
+name = "use_managed_marketdata"
+
 [features]
 default = ["grpc"]
-grpc = ["api/grpc", "hickory-resolver", "tonic"]
+graphql = ["graphql_client", "reqwest"]
+grpc = ["api/grpc", "graphql", "hickory-resolver", "tonic"]
 netidx = [
     "api/netidx",
     "dep:netidx",
@@ -31,6 +47,7 @@ netidx = [
 
 [dependencies]
 anyhow = { workspace = true }
+# CR alee: rename this to architect-api for examples friendliness?
 api = { package = "architect-api", version = "2.10.1", path = "../api" }
 arc-swap = { workspace = true }
 arcstr = { workspace = true }
@@ -43,6 +60,7 @@ enumflags2 = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 fxhash = { workspace = true }
+graphql_client = { workspace = true, optional = true }
 hickory-resolver = { workspace = true, optional = true }
 immutable-chunkmap = { workspace = true }
 itertools = { workspace = true }
@@ -61,6 +79,7 @@ parking_lot = { workspace = true }
 paste = { workspace = true }
 pkcs8 = { workspace = true, optional = true }
 regex = { workspace = true }
+reqwest = { workspace = true, optional = true }
 rust_decimal = { workspace = true }
 rust_decimal_macros = { workspace = true }
 serde = { workspace = true }
@@ -78,6 +97,10 @@ url = { workspace = true }
 uuid = { workspace = true }
 zeroize = { workspace = true }
 zstd = { workspace = true, optional = true }
+
+[dev-dependencies]
+env_logger = { workspace = true }
+inquire = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = ["md-5"]

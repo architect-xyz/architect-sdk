@@ -8,6 +8,8 @@ pub mod client;
 #[cfg(feature = "netidx")]
 pub mod common;
 pub mod external_driver;
+#[cfg(feature = "graphql")]
+pub mod graphql;
 pub mod marketdata;
 #[cfg(feature = "netidx")]
 pub mod orderflow;
