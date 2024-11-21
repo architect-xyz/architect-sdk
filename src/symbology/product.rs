@@ -15,7 +15,7 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     sync::{atomic::AtomicUsize, Arc},

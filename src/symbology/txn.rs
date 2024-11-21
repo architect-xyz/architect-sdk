@@ -4,7 +4,7 @@ use super::{
 use anyhow::{anyhow, bail, Result};
 use api::{
     pool,
-    symbology::{MarketId, ProductId, RouteId, SymbologyUpdateKind, VenueId},
+    symbology::{MarketId, MarketInfo, ProductId, RouteId, SymbologyUpdateKind, VenueId},
     utils::pool::Pooled,
     Str,
 };
@@ -187,6 +187,18 @@ impl Txn {
 
     pub fn get_product_by_id(&self, id: &ProductId) -> Option<ProductRef> {
         self.product_by_id.get(id).copied()
+    }
+
+    pub fn get_market_by_extra_info<F>(&self, selector: F) -> Option<MarketRef>
+    where
+        F: Fn(MarketInfo) -> bool,
+    {
+        self.index
+            .all()
+            .into_iter()
+            .filter(|market| selector(market.extra_info.clone()))
+            .next()
+            .copied()
     }
 
     pub fn get_market_by_id(&self, id: &MarketId) -> Option<MarketRef> {
