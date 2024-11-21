@@ -191,12 +191,12 @@ impl Txn {
 
     pub fn get_market_by_extra_info<F>(&self, selector: F) -> Option<MarketRef>
     where
-        F: Fn(MarketInfo) -> bool,
+        F: Fn(&MarketInfo) -> bool,
     {
         self.index
             .all()
             .into_iter()
-            .filter(|market| selector(market.extra_info.clone()))
+            .filter(|market| selector(&market.extra_info))
             .next()
             .copied()
     }
