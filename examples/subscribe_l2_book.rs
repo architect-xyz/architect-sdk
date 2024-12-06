@@ -9,19 +9,27 @@ struct Cli {
     #[arg(
         long,
         value_delimiter = ',',
-        default_value = "coinbase.marketdata.architect.co"
+        default_value = "https://coinbase.marketdata.architect.co"
     )]
     endpoint: String,
     market: MarketId,
+    /// Just request a snapshot and return
+    #[arg(long, default_value_t = false)]
+    snapshot: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    let Cli { endpoint, market } = Cli::parse();
+    let Cli { endpoint, market, snapshot } = Cli::parse();
     let client = ArchitectClient::default();
     println!("Resolving service {endpoint}...");
     let endpoint = client.resolve_service(endpoint.as_str()).await?;
+    if snapshot {
+        let snapshot = client.l2_book_snapshot_from(&endpoint, market).await?;
+        println!("{snapshot:?}");
+        return Ok(());
+    }
     println!("Connecting to endpoint: {}", endpoint.uri());
     let mut l2_client = L2Client::connect(endpoint, market).await?;
     println!("Subscribed");

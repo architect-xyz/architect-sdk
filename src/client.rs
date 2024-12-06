@@ -284,6 +284,21 @@ impl ArchitectClient {
     }
 
     #[cfg(feature = "grpc")]
+    pub async fn l2_book_snapshot_from(
+        &self,
+        endpoint: &Endpoint,
+        market_id: MarketId,
+    ) -> Result<L2BookSnapshot> {
+        let channel = endpoint.connect().await?;
+        let mut client = MarketdataClient::new(channel);
+        let snapshot = client
+            .l2_book_snapshot(L2BookSnapshotRequest { market_id })
+            .await?
+            .into_inner();
+        Ok(snapshot)
+    }
+
+    #[cfg(feature = "grpc")]
     pub async fn subscribe_candles_from(
         &self,
         endpoint: &Endpoint,
