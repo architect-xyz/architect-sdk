@@ -26,6 +26,7 @@ name = "subscribe_trades"
 name = "use_managed_marketdata"
 
 [features]
+all = ["graphql", "grpc", "netidx"]
 default = ["grpc"]
 graphql = ["graphql_client", "reqwest"]
 grpc = ["api/grpc", "graphql", "hickory-resolver", "tonic"]

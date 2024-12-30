@@ -1,6 +1,4 @@
 #[cfg(feature = "netidx")]
-pub mod account_manager;
-#[cfg(feature = "netidx")]
 pub mod admin_stats;
 #[cfg(feature = "netidx")]
 pub mod channel_driver;

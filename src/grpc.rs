@@ -5,7 +5,11 @@ use api::HumanDuration;
 use clap::Args;
 use log::error;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::{
+    net::IpAddr,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
 use url::Url;
 
@@ -54,11 +58,16 @@ impl GrpcClientConfig {
 
     /// Open a gRPC channel to the given endpoint URL
     pub async fn connect(&self, url: &Url) -> Result<Channel> {
-        let mut endpoint = Endpoint::try_from(url.to_string())?;
+        let endpoint = Endpoint::try_from(url.to_string())?;
+        self.connect_to(endpoint).await
+    }
+
+    /// Open a gRPC channel to the given endpoint
+    pub async fn connect_to(&self, mut endpoint: Endpoint) -> Result<Channel> {
         if let Some(dur) = self.connect_timeout {
             endpoint = endpoint.connect_timeout((*dur).to_std()?);
         }
-        if url.scheme() == "https" {
+        if endpoint.uri().scheme_str() == Some("https") {
             let ca = Certificate::from_pem(ARCHITECT_CA);
             let mut tls_config =
                 ClientTlsConfig::new().with_enabled_roots().ca_certificate(ca);
@@ -69,7 +78,7 @@ impl GrpcClientConfig {
                 let add_ca = Certificate::from_pem(&add_ca_pem);
                 tls_config = tls_config.ca_certificate(add_ca);
                 // useful notice
-                if url.domain().is_none() {
+                if endpoint.uri().host().is_some_and(|h| is_ip_address(h)) {
                     error!("url is not a domain name but scheme is https; this will always fail tls domain verification");
                     error!("if connecting to 127.0.0.1--use \"localhost\" instead")
                 }
@@ -87,6 +96,10 @@ impl GrpcClientConfig {
         let channel = endpoint.connect().await?;
         Ok(channel)
     }
+}
+
+fn is_ip_address(host: &str) -> bool {
+    IpAddr::from_str(host).is_ok()
 }
 
 /// Canonical reading of a TLS identity from file for tonic/gRPC
