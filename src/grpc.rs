@@ -1,6 +1,6 @@
 //! Useful/safe/Architect-tuned abstractions for gRPC clients
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use api::HumanDuration;
 use clap::Args;
 use log::error;
@@ -21,6 +21,12 @@ pub struct GrpcClientConfig {
     #[serde(default)]
     #[arg(long)]
     connect_timeout: Option<HumanDuration>,
+    /// Specify that TLS client auth should be used.  If a TLS identity
+    /// isn't explicitly provided, look for the Architect license file
+    /// in the default directory.
+    #[serde(default)]
+    #[arg(long)]
+    tls_client: bool,
     /// Specify a certificate to present for TLS client certificate auth;
     /// the corresponding private key file will be looked for at the same
     /// path but with .key extension, unless explicitly overriden.
@@ -44,6 +50,7 @@ impl Default for GrpcClientConfig {
     fn default() -> Self {
         Self {
             connect_timeout: Self::default_connect_timeout(),
+            tls_client: false,
             tls_identity: None,
             tls_identity_key: None,
             dangerous_additional_ca_certificate: None,
@@ -83,13 +90,28 @@ impl GrpcClientConfig {
                     error!("if connecting to 127.0.0.1--use \"localhost\" instead")
                 }
             }
-            if let Some(cert_path) = &self.tls_identity {
-                let identity = grpc_tls_identity_from_pem_files(
-                    cert_path,
-                    self.tls_identity_key.as_ref(),
-                )
-                .await?;
-                tls_config = tls_config.identity(identity);
+            if self.tls_client || self.tls_identity.is_some() {
+                if let Some(cert_path) = &self.tls_identity {
+                    let identity = grpc_tls_identity_from_pem_files(
+                        cert_path,
+                        self.tls_identity_key.as_ref(),
+                    )
+                    .await?;
+                    tls_config = tls_config.identity(identity);
+                } else {
+                    // try the Architect/netidx default location
+                    let mut cert_path = dirs::config_dir().ok_or_else(|| {
+                        anyhow!("could not determine default config directory")
+                    })?;
+                    cert_path.push("netidx");
+                    cert_path.push("license.crt");
+                    let identity = grpc_tls_identity_from_pem_files(
+                        cert_path,
+                        self.tls_identity_key.as_ref(),
+                    )
+                    .await?;
+                    tls_config = tls_config.identity(identity);
+                }
             }
             endpoint = endpoint.tls_config(tls_config)?;
         }
