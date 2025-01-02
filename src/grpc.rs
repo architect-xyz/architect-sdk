@@ -20,30 +20,30 @@ pub struct GrpcClientConfig {
     /// Connect timeout, e.g. 3s for three seconds
     #[serde(default)]
     #[arg(long)]
-    connect_timeout: Option<HumanDuration>,
+    pub connect_timeout: Option<HumanDuration>,
     /// Specify that TLS client auth should be used.  If a TLS identity
     /// isn't explicitly provided, look for the Architect license file
     /// in the default directory.
     #[serde(default)]
     #[arg(long)]
-    tls_client: bool,
+    pub tls_client: bool,
     /// Specify a certificate to present for TLS client certificate auth;
     /// the corresponding private key file will be looked for at the same
     /// path but with .key extension, unless explicitly overriden.
     #[serde(default)]
     #[arg(long)]
-    tls_identity: Option<PathBuf>,
+    pub tls_identity: Option<PathBuf>,
     /// Explicitly specify the private key for TLS client certificate
     /// auth, if not at the canonical location.
     #[serde(default)]
     #[arg(long)]
-    tls_identity_key: Option<PathBuf>,
+    pub tls_identity_key: Option<PathBuf>,
     // CR alee: for localhost, prefer `dangerous_accept_any_tls_for_localhost`;
     // implementing requires a change in tonic
     /// Manually specify an additional root certificate to verify server TLS
     #[serde(default)]
     #[arg(long = "ca")]
-    dangerous_additional_ca_certificate: Option<PathBuf>,
+    pub dangerous_additional_ca_certificate: Option<PathBuf>,
 }
 
 impl Default for GrpcClientConfig {

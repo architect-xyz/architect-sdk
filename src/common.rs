@@ -1,4 +1,6 @@
-use crate::{admin_stats::AdminStats, tls, ChannelDriverBuilder, Paths};
+use crate::{
+    admin_stats::AdminStats, grpc::GrpcClientConfig, tls, ChannelDriverBuilder, Paths,
+};
 use anyhow::{anyhow, Context, Result};
 use api::{symbology::CptyId, ComponentId, Config, UserId};
 use fxhash::{FxHashMap, FxHashSet};
@@ -281,6 +283,14 @@ impl Common {
 
     pub fn channel_driver(&self) -> ChannelDriverBuilder {
         ChannelDriverBuilder::new(self)
+    }
+
+    pub fn grpc_client_config(&self) -> GrpcClientConfig {
+        GrpcClientConfig {
+            tls_identity: self.config.tls.as_ref().map(|t| t.certificate.clone()),
+            tls_identity_key: self.config.tls.as_ref().map(|t| t.private_key.clone()),
+            ..Default::default()
+        }
     }
 
     #[cfg(feature = "netidx")]
