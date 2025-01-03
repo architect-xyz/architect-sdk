@@ -246,6 +246,11 @@ impl ProductKind {
         }
     }
 
+    // TODO: support equity options
+    pub fn is_security(&self) -> bool {
+        matches!(self, ProductKind::Equity)
+    }
+
     pub fn is_event(&self) -> bool {
         matches!(self, ProductKind::Event { .. })
     }
