@@ -1,9 +1,8 @@
 use anyhow::{anyhow, Result};
 use api::{
-    external::marketdata::SequenceIdAndNumber,
     marketdata::{Snapshot, Update, Updates},
     pool,
-    utils::pool::Pooled,
+    utils::{pool::Pooled, sequence::SequenceIdAndNumber},
     Dir, DirPair,
 };
 use chrono::prelude::*;

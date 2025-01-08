@@ -16,6 +16,8 @@ pub mod orderflow;
 #[cfg(feature = "netidx")]
 pub mod paths;
 pub mod symbology;
+#[cfg(feature = "grpc")]
+pub mod symbology_v2;
 pub mod synced;
 #[cfg(feature = "netidx")]
 pub mod tls;

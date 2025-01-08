@@ -3,7 +3,7 @@ use crate::synced::{SyncHandle, Synced};
 use anyhow::{anyhow, bail, Result};
 use api::{
     external::marketdata::*, grpc::json_service::marketdata_client::MarketdataClient,
-    symbology::MarketId,
+    symbology::MarketId, utils::sequence::SequenceIdAndNumber,
 };
 use futures::StreamExt;
 use log::{debug, error};
