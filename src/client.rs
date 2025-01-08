@@ -277,7 +277,10 @@ impl ArchitectClient {
         let channel = endpoint.connect().await?;
         let mut client = MarketdataClient::new(channel);
         let stream = client
-            .subscribe_l1_book_snapshots(SubscribeL1BookSnapshotsRequest { market_ids })
+            .subscribe_l1_book_snapshots(SubscribeL1BookSnapshotsRequest {
+                market_ids,
+                symbols: None,
+            })
             .await?
             .into_inner();
         Ok(stream)
@@ -292,7 +295,10 @@ impl ArchitectClient {
         let channel = endpoint.connect().await?;
         let mut client = MarketdataClient::new(channel);
         let snapshot = client
-            .l2_book_snapshot(L2BookSnapshotRequest { market_id })
+            .l2_book_snapshot(L2BookSnapshotRequest {
+                market_id: Some(market_id),
+                symbol: None,
+            })
             .await?
             .into_inner();
         Ok(snapshot)
@@ -314,7 +320,11 @@ impl ArchitectClient {
                 Ok(req)
             });
         let stream = client
-            .subscribe_candles(SubscribeCandlesRequest { market_id, candle_width })
+            .subscribe_candles(SubscribeCandlesRequest {
+                market_id: Some(market_id),
+                symbol: None,
+                candle_width,
+            })
             .await?
             .into_inner();
         Ok(stream)
@@ -338,6 +348,7 @@ impl ArchitectClient {
         let stream = client
             .subscribe_many_candles(SubscribeManyCandlesRequest {
                 market_ids,
+                symbols: None,
                 candle_width,
             })
             .await?
@@ -360,7 +371,7 @@ impl ArchitectClient {
                 Ok(req)
             });
         let stream = client
-            .subscribe_trades(SubscribeTradesRequest { market_id })
+            .subscribe_trades(SubscribeTradesRequest { market_id, symbol: None })
             .await?
             .into_inner();
         Ok(stream)

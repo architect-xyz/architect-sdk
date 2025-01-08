@@ -261,7 +261,10 @@ impl ManagedL2Clients {
     ) -> Result<(StreamKey, Streaming<L2BookUpdate>)> {
         let market_id = handle.market_id;
         let mut updates = client
-            .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest { market_id })
+            .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest {
+                market_id: Some(market_id),
+                symbol: None,
+            })
             .await?
             .into_inner();
         let first_update = updates.next().await.ok_or(anyhow!("no first update"))??;

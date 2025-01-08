@@ -39,7 +39,10 @@ impl L2Client {
     {
         let mut client = MarketdataClient::connect(endpoint).await?;
         let mut updates = client
-            .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest { market_id })
+            .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest {
+                market_id: Some(market_id),
+                symbol: None,
+            })
             .await?
             .into_inner();
         // Simple, non-buffering version of the client; we trust the server to send
