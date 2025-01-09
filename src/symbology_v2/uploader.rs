@@ -4,7 +4,7 @@ use api::{
     grpc::json_service::symbology_v2_client::SymbologyV2Client as SymbologyV2GrpcClient,
     symbology_v2::{protocol::*, *},
 };
-use std::{borrow::Borrow, collections::BTreeMap};
+use std::collections::BTreeMap;
 use url::Url;
 
 pub struct SymbologyUploader {
@@ -44,26 +44,26 @@ impl SymbologyUploader {
         Ok(())
     }
 
-    pub fn add_execution_info<S: Borrow<str>>(
+    pub fn add_execution_info<S: AsRef<str>>(
         &mut self,
         symbol: S,
         venue: ExecutionVenue,
         info: ExecutionInfo,
     ) {
         self.execution_info
-            .entry(symbol.borrow().to_string())
+            .entry(symbol.as_ref().to_string())
             .or_insert_with(BTreeMap::new)
             .insert(venue, info);
     }
 
-    pub fn add_marketdata_info<S: Borrow<str>>(
+    pub fn add_marketdata_info<S: AsRef<str>>(
         &mut self,
         symbol: S,
         venue: MarketdataVenue,
         info: MarketdataInfo,
     ) {
         self.marketdata_info
-            .entry(symbol.borrow().to_string())
+            .entry(symbol.as_ref().to_string())
             .or_insert_with(BTreeMap::new)
             .insert(venue, info);
     }
