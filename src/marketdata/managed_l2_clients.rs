@@ -231,6 +231,7 @@ impl ManagedL2Clients {
             let alive = Arc::new(());
             let handle = L2ClientHandle {
                 market_id,
+                symbol: None,
                 state: Arc::new(Mutex::new(L2ClientState::default())),
                 ready: ready.synced(),
                 alive: Arc::downgrade(&alive),

@@ -5,6 +5,7 @@ use api::{
     external::marketdata::*, grpc::json_service::marketdata_client::MarketdataClient,
     symbology::MarketId, utils::sequence::SequenceIdAndNumber,
 };
+use arcstr::ArcStr;
 use futures::StreamExt;
 use log::{debug, error};
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
@@ -12,7 +13,7 @@ use std::{
     sync::{Arc, Weak},
     time::Duration,
 };
-use tonic::Streaming;
+use tonic::{transport::Channel, Streaming};
 
 /// L2 book client for a single symbol.  No retries/reconnection logic; it just
 /// subscribes to and maintains the book.
@@ -25,6 +26,7 @@ use tonic::Streaming;
 /// to create a cheaply cloneable handle to pass around.
 pub struct L2Client {
     market_id: MarketId,
+    symbol: Option<ArcStr>,
     updates: Streaming<L2BookUpdate>,
     state: Arc<Mutex<L2ClientState>>,
     ready: SyncHandle<bool>,
@@ -32,6 +34,41 @@ pub struct L2Client {
 }
 
 impl L2Client {
+    pub async fn new(channel: Channel, symbol: String) -> Result<Self> {
+        let mut client = MarketdataClient::new(channel);
+        let mut updates = client
+            .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest {
+                market_id: None,
+                symbol: Some(symbol.clone()),
+            })
+            .await?
+            .into_inner();
+        // Simple, non-buffering version of the client; we trust the server to send
+        // us the snapshot first, and then the diffs in sequence order.  If that's
+        // not the case, bail.
+        let first_update = updates.next().await.ok_or(anyhow!("no first update"))??;
+        let state = match first_update {
+            L2BookUpdate::Snapshot(snap) => {
+                debug!("subscribed to stream, first update: {:?}", snap);
+                L2ClientState {
+                    sequence: snap.sequence,
+                    book: LevelBook::of_l2_book_snapshot(snap)?,
+                }
+            }
+            L2BookUpdate::Diff(..) => {
+                bail!("received diff before snapshot on L2 book update stream");
+            }
+        };
+        Ok(Self {
+            market_id: MarketId::from(symbol.clone()),
+            symbol: Some(symbol.into()),
+            updates,
+            state: Arc::new(Mutex::new(state)),
+            ready: SyncHandle::new(true), // already got snapshot
+            alive: Arc::new(()),
+        })
+    }
+
     pub async fn connect<D>(endpoint: D, market_id: MarketId) -> Result<Self>
     where
         D: TryInto<tonic::transport::Endpoint>,
@@ -63,6 +100,7 @@ impl L2Client {
         };
         Ok(Self {
             market_id,
+            symbol: None,
             updates,
             state: Arc::new(Mutex::new(state)),
             ready: SyncHandle::new(true), // already got snapshot
@@ -90,6 +128,7 @@ impl L2Client {
     pub fn handle(&self) -> L2ClientHandle {
         L2ClientHandle {
             market_id: self.market_id,
+            symbol: self.symbol.clone(),
             state: self.state.clone(),
             ready: self.ready.synced(),
             alive: Arc::downgrade(&self.alive),
@@ -123,6 +162,8 @@ impl L2Client {
 #[derive(Clone)]
 pub struct L2ClientHandle {
     pub(super) market_id: MarketId,
+    #[allow(unused)]
+    pub(super) symbol: Option<ArcStr>,
     pub(super) state: Arc<Mutex<L2ClientState>>,
     pub(super) ready: Synced<bool>,
     pub(super) alive: Weak<()>,

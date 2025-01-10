@@ -2,8 +2,7 @@ use crate::grpc::GrpcClientConfig;
 use anyhow::{bail, Result};
 use api::{
     grpc::json_service::symbology_v2_client::SymbologyV2Client as SymbologyV2GrpcClient,
-    symbology_v2::{protocol::*, *},
-    utils::sequence::SequenceIdAndNumber,
+    symbology_v2::protocol::*, utils::sequence::SequenceIdAndNumber,
 };
 use parking_lot::Mutex;
 use std::{collections::BTreeMap, sync::Arc};
@@ -12,32 +11,23 @@ use url::Url;
 
 #[derive(Clone)]
 pub struct SymbologyStore {
-    inner: Arc<Mutex<SymbologyContents>>,
+    inner: Arc<Mutex<SymbologySnapshot>>,
     pub updates: broadcast::Sender<SymbologyUpdate>,
 }
 
 impl std::ops::Deref for SymbologyStore {
-    type Target = Arc<Mutex<SymbologyContents>>;
+    type Target = Arc<Mutex<SymbologySnapshot>>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
 
-pub struct SymbologyContents {
-    pub sequence: SequenceIdAndNumber,
-    pub products: BTreeMap<Product, ProductInfo>,
-    pub tradable_products: BTreeMap<TradableProduct, TradableProductInfo>,
-    pub options_series: BTreeMap<OptionsSeries, OptionsSeriesInfo>,
-    pub execution_info: BTreeMap<String, BTreeMap<ExecutionVenue, ExecutionInfo>>,
-    pub marketdata_info: BTreeMap<String, BTreeMap<MarketdataVenue, MarketdataInfo>>,
-}
-
 impl SymbologyStore {
     pub fn new() -> Self {
         let (updates, _) = broadcast::channel(1000);
         Self {
-            inner: Arc::new(Mutex::new(SymbologyContents {
+            inner: Arc::new(Mutex::new(SymbologySnapshot {
                 sequence: SequenceIdAndNumber::new_random(),
                 products: BTreeMap::new(),
                 tradable_products: BTreeMap::new(),
@@ -148,6 +138,11 @@ impl SymbologyStore {
             .updates
             .send(SymbologyUpdate { sequence: inner.sequence, ..update_to_send });
         Ok(inner.sequence)
+    }
+
+    pub fn snapshot(&self) -> SymbologySnapshot {
+        let inner = self.inner.lock();
+        (*inner).clone()
     }
 
     pub fn snapshot_update(&self) -> (SymbologyUpdate, SequenceIdAndNumber) {

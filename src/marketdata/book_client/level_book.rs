@@ -6,6 +6,7 @@ use api::{
     Dir, DirPair,
 };
 use chrono::prelude::*;
+use derive_more::{Deref, DerefMut};
 use itertools::Itertools;
 #[cfg(feature = "netidx")]
 use netidx_derive::Pack;
@@ -13,7 +14,6 @@ use rust_decimal::Decimal;
 use std::{
     collections::{btree_map::Iter, BTreeMap},
     iter::Rev,
-    ops::{Deref, DerefMut},
 };
 
 // CR alee: probably want to rethink where to put these
@@ -82,31 +82,13 @@ impl<'a> Iterator for LevelIterator<'a> {
 }
 
 /// An order book
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Deref, DerefMut, Clone)]
 #[cfg_attr(feature = "netidx", derive(Pack))]
 pub struct LevelBook {
+    #[deref]
+    #[deref_mut]
     pub book: DirPair<BTreeMap<Decimal, Decimal>>,
     pub timestamp: DateTime<Utc>,
-}
-
-impl Deref for LevelBook {
-    type Target = DirPair<BTreeMap<Decimal, Decimal>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.book
-    }
-}
-
-impl DerefMut for LevelBook {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.book
-    }
-}
-
-impl Default for LevelBook {
-    fn default() -> Self {
-        LevelBook { book: DirPair::default(), timestamp: DateTime::<Utc>::default() }
-    }
 }
 
 impl LevelBook {
