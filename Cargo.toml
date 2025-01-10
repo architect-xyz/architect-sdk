@@ -59,6 +59,7 @@ clap = { workspace = true }
 derive_more = { workspace = true }
 dirs = { workspace = true }
 enumflags2 = { workspace = true }
+env_logger = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 fxhash = { workspace = true }
