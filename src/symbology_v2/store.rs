@@ -11,7 +11,7 @@ use url::Url;
 
 #[derive(Clone)]
 pub struct SymbologyStore {
-    inner: Arc<Mutex<SymbologySnapshot>>,
+    pub(super) inner: Arc<Mutex<SymbologySnapshot>>,
     pub updates: broadcast::Sender<SymbologyUpdate>,
 }
 

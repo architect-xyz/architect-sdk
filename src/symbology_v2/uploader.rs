@@ -1,3 +1,4 @@
+use super::store::SymbologyStore;
 use crate::grpc::GrpcClientConfig;
 use anyhow::Result;
 use api::{
@@ -42,6 +43,18 @@ impl SymbologyUploader {
         })
         .await?;
         Ok(())
+    }
+
+    pub fn into_store(self) -> SymbologyStore {
+        let store = SymbologyStore::new();
+        let mut inner = store.inner.lock();
+        inner.products = self.products;
+        inner.tradable_products = self.tradable_products;
+        inner.options_series = self.options_series;
+        inner.execution_info = self.execution_info;
+        inner.marketdata_info = self.marketdata_info;
+        drop(inner);
+        store
     }
 
     pub fn add_execution_info<S: AsRef<str>>(
