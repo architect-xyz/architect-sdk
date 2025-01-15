@@ -10,20 +10,16 @@ use url::Url;
 
 pub struct SymbologyUploader {
     pub products: BTreeMap<Product, ProductInfo>,
-    pub tradable_products: BTreeMap<TradableProduct, TradableProductInfo>,
     pub options_series: BTreeMap<OptionsSeries, OptionsSeriesInfo>,
     pub execution_info: BTreeMap<String, BTreeMap<ExecutionVenue, ExecutionInfo>>,
-    pub marketdata_info: BTreeMap<String, BTreeMap<MarketdataVenue, MarketdataInfo>>,
 }
 
 impl SymbologyUploader {
     pub fn new() -> Self {
         Self {
             products: BTreeMap::new(),
-            tradable_products: BTreeMap::new(),
             options_series: BTreeMap::new(),
             execution_info: BTreeMap::new(),
-            marketdata_info: BTreeMap::new(),
         }
     }
 
@@ -36,10 +32,8 @@ impl SymbologyUploader {
         let mut grpc = SymbologyV2GrpcClient::new(channel);
         grpc.upload_symbology_v2(UploadSymbologyV2Request {
             products: self.products,
-            tradable_products: self.tradable_products,
             options_series: self.options_series,
             execution_info: self.execution_info,
-            marketdata_info: self.marketdata_info,
         })
         .await?;
         Ok(())
@@ -49,10 +43,8 @@ impl SymbologyUploader {
         let store = SymbologyStore::new();
         let mut inner = store.inner.lock();
         inner.products = self.products;
-        inner.tradable_products = self.tradable_products;
         inner.options_series = self.options_series;
         inner.execution_info = self.execution_info;
-        inner.marketdata_info = self.marketdata_info;
         drop(inner);
         store
     }
@@ -64,18 +56,6 @@ impl SymbologyUploader {
         info: ExecutionInfo,
     ) {
         self.execution_info
-            .entry(symbol.as_ref().to_string())
-            .or_insert_with(BTreeMap::new)
-            .insert(venue, info);
-    }
-
-    pub fn add_marketdata_info<S: AsRef<str>>(
-        &mut self,
-        symbol: S,
-        venue: MarketdataVenue,
-        info: MarketdataInfo,
-    ) {
-        self.marketdata_info
             .entry(symbol.as_ref().to_string())
             .or_insert_with(BTreeMap::new)
             .insert(venue, info);

@@ -4,48 +4,43 @@ use api::{
     grpc::json_service::symbology_v2_client::SymbologyV2Client as SymbologyV2GrpcClient,
     symbology_v2::protocol::*, utils::sequence::SequenceIdAndNumber,
 };
+use derive_more::{Deref, DerefMut};
 use parking_lot::Mutex;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::broadcast;
 use url::Url;
 
-#[derive(Clone)]
+#[derive(Clone, Deref)]
 pub struct SymbologyStore {
-    pub(super) inner: Arc<Mutex<SymbologySnapshot>>,
+    #[deref]
+    pub(super) inner: Arc<Mutex<IndexedSymbology>>,
     pub updates: broadcast::Sender<SymbologyUpdate>,
 }
 
-impl std::ops::Deref for SymbologyStore {
-    type Target = Arc<Mutex<SymbologySnapshot>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
+#[derive(Deref, DerefMut)]
+pub struct IndexedSymbology {
+    #[deref]
+    #[deref_mut]
+    pub snapshot: SymbologySnapshot,
 }
 
 impl SymbologyStore {
     pub fn new() -> Self {
         let (updates, _) = broadcast::channel(1000);
-        Self {
-            inner: Arc::new(Mutex::new(SymbologySnapshot {
-                sequence: SequenceIdAndNumber::new_random(),
-                products: BTreeMap::new(),
-                tradable_products: BTreeMap::new(),
-                options_series: BTreeMap::new(),
-                execution_info: BTreeMap::new(),
-                marketdata_info: BTreeMap::new(),
-            })),
-            updates,
-        }
+        let snapshot = SymbologySnapshot {
+            sequence: SequenceIdAndNumber::new_random(),
+            products: BTreeMap::new(),
+            options_series: BTreeMap::new(),
+            execution_info: BTreeMap::new(),
+        };
+        Self { inner: Arc::new(Mutex::new(IndexedSymbology { snapshot })), updates }
     }
 
     pub fn clear(&self) {
         let mut inner = self.inner.lock();
         inner.products.clear();
-        inner.tradable_products.clear();
         inner.options_series.clear();
         inner.execution_info.clear();
-        inner.marketdata_info.clear();
     }
 
     /// Connect to and download a symbology snapshot from a URL.
@@ -78,9 +73,6 @@ impl SymbologyStore {
         if let Some(action) = update.products {
             action.apply(&mut inner.products);
         }
-        if let Some(action) = update.tradable_products {
-            action.apply(&mut inner.tradable_products);
-        }
         if let Some(action) = update.options_series {
             action.apply(&mut inner.options_series);
         }
@@ -109,31 +101,6 @@ impl SymbologyStore {
             }
             None => {}
         }
-        match update.marketdata_info {
-            Some(SnapshotOrUpdate2::Snapshot { snapshot }) => {
-                inner.marketdata_info = snapshot;
-            }
-            Some(SnapshotOrUpdate2::Update { updates }) => {
-                for action in updates {
-                    match action {
-                        AddOrRemove2::Add { symbol, info } => {
-                            inner
-                                .marketdata_info
-                                .entry(symbol)
-                                .or_insert_with(BTreeMap::new)
-                                .insert(info.marketdata_venue.clone(), info);
-                        }
-                        AddOrRemove2::Remove { symbol, venue } => {
-                            if let Some(by_venue) = inner.marketdata_info.get_mut(&symbol)
-                            {
-                                by_venue.remove(&venue);
-                            }
-                        }
-                    }
-                }
-            }
-            None => {}
-        }
         let _ = self
             .updates
             .send(SymbologyUpdate { sequence: inner.sequence, ..update_to_send });
@@ -151,15 +118,10 @@ impl SymbologyStore {
         update.sequence = inner.sequence;
         update.products =
             Some(SnapshotOrUpdate::Snapshot { snapshot: inner.products.clone() });
-        update.tradable_products = Some(SnapshotOrUpdate::Snapshot {
-            snapshot: inner.tradable_products.clone(),
-        });
         update.options_series =
             Some(SnapshotOrUpdate::Snapshot { snapshot: inner.options_series.clone() });
         update.execution_info =
             Some(SnapshotOrUpdate2::Snapshot { snapshot: inner.execution_info.clone() });
-        update.marketdata_info =
-            Some(SnapshotOrUpdate2::Snapshot { snapshot: inner.marketdata_info.clone() });
         (update, inner.sequence)
     }
 }
