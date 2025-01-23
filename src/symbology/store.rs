@@ -1,8 +1,8 @@
 use crate::grpc::GrpcClientConfig;
 use anyhow::{bail, Result};
 use api::{
-    grpc::json_service::symbology_v2_client::SymbologyV2Client as SymbologyV2GrpcClient,
-    symbology_v2::protocol::*, utils::sequence::SequenceIdAndNumber,
+    grpc::json_service::symbology_client::SymbologyClient as SymbologyGrpcClient,
+    symbology::protocol::*, utils::sequence::SequenceIdAndNumber,
 };
 use derive_more::{Deref, DerefMut};
 use parking_lot::Mutex;
@@ -52,9 +52,9 @@ impl SymbologyStore {
         grpc_config: &GrpcClientConfig,
     ) -> Result<Self> {
         let channel = grpc_config.connect(url).await?;
-        let mut grpc = SymbologyV2GrpcClient::new(channel);
+        let mut grpc = SymbologyGrpcClient::new(channel);
         let mut updates =
-            grpc.subscribe_symbology_v2(SubscribeSymbologyV2 {}).await?.into_inner();
+            grpc.subscribe_symbology(SubscribeSymbology {}).await?.into_inner();
         let t = Self::new();
         match updates.message().await {
             Err(e) => bail!("error reading from stream: {:?}", e),

@@ -1,9 +1,9 @@
-use super::book_client::LevelBook;
+use super::LevelBook;
 use crate::synced::{SyncHandle, Synced};
 use anyhow::{anyhow, bail, Result};
 use api::{
-    external::marketdata::*, grpc::json_service::marketdata_client::MarketdataClient,
-    symbology::MarketId, utils::sequence::SequenceIdAndNumber,
+    grpc::json_service::marketdata_client::MarketdataClient, marketdata::*,
+    utils::sequence::SequenceIdAndNumber,
 };
 use arcstr::ArcStr;
 use futures::StreamExt;
@@ -25,8 +25,7 @@ use tonic::{transport::Channel, Streaming};
 /// If you need multiple readers/consumers of this client, use `L2Client::handle()`
 /// to create a cheaply cloneable handle to pass around.
 pub struct L2Client {
-    market_id: MarketId,
-    symbol: Option<ArcStr>,
+    symbol: ArcStr,
     updates: Streaming<L2BookUpdate>,
     state: Arc<Mutex<L2ClientState>>,
     ready: SyncHandle<bool>,
@@ -38,8 +37,7 @@ impl L2Client {
         let mut client = MarketdataClient::new(channel);
         let mut updates = client
             .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest {
-                market_id: None,
-                symbol: Some(symbol.clone()),
+                symbol: symbol.clone(),
             })
             .await?
             .into_inner();
@@ -60,8 +58,7 @@ impl L2Client {
             }
         };
         Ok(Self {
-            market_id: MarketId::from(symbol.clone()),
-            symbol: Some(symbol.into()),
+            symbol: symbol.into(),
             updates,
             state: Arc::new(Mutex::new(state)),
             ready: SyncHandle::new(true), // already got snapshot
@@ -69,7 +66,7 @@ impl L2Client {
         })
     }
 
-    pub async fn connect<D>(endpoint: D, market_id: MarketId) -> Result<Self>
+    pub async fn connect<D>(endpoint: D, symbol: String) -> Result<Self>
     where
         D: TryInto<tonic::transport::Endpoint>,
         D::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
@@ -77,8 +74,7 @@ impl L2Client {
         let mut client = MarketdataClient::connect(endpoint).await?;
         let mut updates = client
             .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest {
-                market_id: Some(market_id),
-                symbol: None,
+                symbol: symbol.clone(),
             })
             .await?
             .into_inner();
@@ -99,8 +95,7 @@ impl L2Client {
             }
         };
         Ok(Self {
-            market_id,
-            symbol: None,
+            symbol: symbol.into(),
             updates,
             state: Arc::new(Mutex::new(state)),
             ready: SyncHandle::new(true), // already got snapshot
@@ -112,14 +107,14 @@ impl L2Client {
         let update = match self.updates.next().await? {
             Ok(update) => update,
             Err(e) => {
-                error!("error on L2 book update stream for {}: {:?}", self.market_id, e);
+                error!("error on L2 book update stream for {}: {:?}", self.symbol, e);
                 return None;
             }
         };
         match self.apply_update(update) {
             Ok(sin) => Some(sin),
             Err(e) => {
-                error!("error applying L2 book update for {}: {:?}", self.market_id, e);
+                error!("error applying L2 book update for {}: {:?}", self.symbol, e);
                 return None;
             }
         }
@@ -127,7 +122,6 @@ impl L2Client {
 
     pub fn handle(&self) -> L2ClientHandle {
         L2ClientHandle {
-            market_id: self.market_id,
             symbol: self.symbol.clone(),
             state: self.state.clone(),
             ready: self.ready.synced(),
@@ -161,9 +155,8 @@ impl L2Client {
 /// In either case, accessor functions will return `None`.
 #[derive(Clone)]
 pub struct L2ClientHandle {
-    pub(super) market_id: MarketId,
     #[allow(unused)]
-    pub(super) symbol: Option<ArcStr>,
+    pub(super) symbol: ArcStr,
     pub(super) state: Arc<Mutex<L2ClientState>>,
     pub(super) ready: Synced<bool>,
     pub(super) alive: Weak<()>,

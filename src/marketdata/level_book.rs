@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use api::{
-    marketdata::{Snapshot, Update, Updates},
     pool,
     utils::{pool::Pooled, sequence::SequenceIdAndNumber},
     Dir, DirPair,
@@ -8,8 +7,6 @@ use api::{
 use chrono::prelude::*;
 use derive_more::{Deref, DerefMut};
 use itertools::Itertools;
-#[cfg(feature = "netidx")]
-use netidx_derive::Pack;
 use rust_decimal::Decimal;
 use std::{
     collections::{btree_map::Iter, BTreeMap},
@@ -83,7 +80,6 @@ impl<'a> Iterator for LevelIterator<'a> {
 
 /// An order book
 #[derive(Debug, Default, Deref, DerefMut, Clone)]
-#[cfg_attr(feature = "netidx", derive(Pack))]
 pub struct LevelBook {
     #[deref]
     #[deref_mut]
@@ -100,42 +96,6 @@ impl LevelBook {
 
     pub fn is_empty(&self) -> bool {
         self.buy.is_empty() && self.sell.is_empty()
-    }
-
-    pub fn update_from_snapshot(&mut self, mut snapshot: Snapshot) {
-        self.buy.clear();
-        self.sell.clear();
-        for (price, size) in snapshot.book.buy.drain(..) {
-            self.buy.insert(price, size);
-        }
-        for (price, size) in snapshot.book.sell.drain(..) {
-            self.sell.insert(price, size);
-        }
-        self.timestamp = snapshot.timestamp;
-    }
-
-    pub fn update(&mut self, mut updates: Updates) {
-        for up in updates.book.buy.drain(..) {
-            match up {
-                Update::Change { price, size } => {
-                    self.buy.insert(price, size);
-                }
-                Update::Remove { price } => {
-                    self.buy.remove(&price);
-                }
-            }
-        }
-        for up in updates.book.sell.drain(..) {
-            match up {
-                Update::Change { price, size } => {
-                    self.sell.insert(price, size);
-                }
-                Update::Remove { price } => {
-                    self.sell.remove(&price);
-                }
-            }
-        }
-        self.timestamp = updates.timestamp;
     }
 
     /// return the best price and quantity given a direction
@@ -204,19 +164,20 @@ impl LevelBook {
     pub fn to_l2_book_snapshot(
         &self,
         sequence: SequenceIdAndNumber,
-    ) -> api::external::marketdata::L2BookSnapshot {
+    ) -> api::marketdata::L2BookSnapshot {
         let bids = self.iter_levels(Dir::Buy).map(|(p, q)| (*p, *q)).collect::<Vec<_>>();
         let asks = self.iter_levels(Dir::Sell).map(|(p, q)| (*p, *q)).collect::<Vec<_>>();
-        api::external::marketdata::L2BookSnapshot::new(
-            self.timestamp,
+        api::marketdata::L2BookSnapshot {
+            timestamp: self.timestamp.timestamp(),
+            timestamp_ns: self.timestamp.timestamp_subsec_nanos(),
             sequence,
             bids,
             asks,
-        )
+        }
     }
 
     pub fn of_l2_book_snapshot(
-        snapshot: api::external::marketdata::L2BookSnapshot,
+        snapshot: api::marketdata::L2BookSnapshot,
     ) -> Result<Self> {
         let timestamp =
             snapshot.timestamp().ok_or(anyhow!("BUG: Snapshot timestamp is invalid"))?;

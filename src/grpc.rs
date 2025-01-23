@@ -21,6 +21,9 @@ pub struct GrpcClientConfig {
     #[serde(default)]
     #[arg(long)]
     pub connect_timeout: Option<HumanDuration>,
+    #[serde(default)]
+    #[arg(skip)]
+    pub connect_lazy: bool,
     /// Specify that TLS client auth should be used.  If a TLS identity
     /// isn't explicitly provided, look for the Architect license file
     /// in the default directory.
@@ -50,6 +53,7 @@ impl Default for GrpcClientConfig {
     fn default() -> Self {
         Self {
             connect_timeout: Self::default_connect_timeout(),
+            connect_lazy: false,
             tls_client: false,
             tls_identity: None,
             tls_identity_key: None,
@@ -115,7 +119,11 @@ impl GrpcClientConfig {
             }
             endpoint = endpoint.tls_config(tls_config)?;
         }
-        let channel = endpoint.connect().await?;
+        let channel = if self.connect_lazy {
+            endpoint.connect_lazy()
+        } else {
+            endpoint.connect().await?
+        };
         Ok(channel)
     }
 }

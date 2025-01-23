@@ -26,25 +26,10 @@ name = "subscribe_trades"
 name = "use_managed_marketdata"
 
 [features]
-all = ["graphql", "grpc", "netidx"]
+all = ["graphql", "grpc"]
 default = ["grpc"]
 graphql = ["graphql_client", "reqwest"]
 grpc = ["api/grpc", "graphql", "hickory-resolver", "tonic"]
-netidx = [
-    "api/netidx",
-    "dep:netidx",
-    "md-5",
-    "netidx-archive",
-    "netidx-core",
-    "netidx-derive",
-    "netidx-protocols",
-    "num_cpus",
-    "pkcs8",
-    "openssl",
-    "serde_yaml",
-    "sysinfo",
-    "zstd",
-]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -52,60 +37,33 @@ anyhow = { workspace = true }
 api = { package = "architect-api", version = "5.0.8", path = "../api" }
 arc-swap = { workspace = true }
 arcstr = { workspace = true }
-async-stream = { workspace = true }
-bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 derive_more = { workspace = true }
 dirs = { workspace = true }
-enumflags2 = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }
-futures-util = { workspace = true }
 fxhash = { workspace = true }
 graphql_client = { workspace = true, optional = true }
 hickory-resolver = { workspace = true, optional = true }
-immutable-chunkmap = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
-md-5 = { workspace = true, optional = true }
-netidx = { workspace = true, optional = true }
-netidx-archive = { workspace = true, optional = true }
-netidx-core = { workspace = true, optional = true }
-netidx-derive = { workspace = true, optional = true }
-netidx-protocols = { workspace = true, optional = true }
-num_cpus = { workspace = true, optional = true }
 once_cell = { workspace = true }
-openssl = { workspace = true, optional = true }
 parking_lot = { workspace = true }
-paste = { workspace = true }
-pkcs8 = { workspace = true, optional = true }
-regex = { workspace = true }
 reqwest = { workspace = true, optional = true }
 rust_decimal = { workspace = true }
-rust_decimal_macros = { workspace = true }
 serde = { workspace = true }
-serde_derive = { workspace = true }
-serde_json = { workspace = true }
-serde_yaml = { workspace = true, optional = true }
-smallvec = { workspace = true }
-sysinfo = { workspace = true, optional = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
-tokio-tungstenite = { workspace = true }
 tonic = { workspace = true, optional = true }
 url = { workspace = true }
-uuid = { workspace = true }
-zeroize = { workspace = true }
-zstd = { workspace = true, optional = true }
 
 [dev-dependencies]
 env_logger = { workspace = true }
 inquire = { workspace = true }
 
 [package.metadata.cargo-machete]
-ignored = [
-    "md-5",
-    "netidx_core", # netidx_derive
+ignore = [
+    "once_cell", # api::pool
 ]

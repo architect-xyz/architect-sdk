@@ -2,8 +2,8 @@ use super::store::SymbologyStore;
 use crate::grpc::GrpcClientConfig;
 use anyhow::Result;
 use api::{
-    grpc::json_service::symbology_v2_client::SymbologyV2Client as SymbologyV2GrpcClient,
-    symbology_v2::{protocol::*, *},
+    grpc::json_service::symbology_client::SymbologyClient as SymbologyGrpcClient,
+    symbology::{protocol::*, *},
 };
 use std::collections::BTreeMap;
 use url::Url;
@@ -29,8 +29,8 @@ impl SymbologyUploader {
         grpc_config: &GrpcClientConfig,
     ) -> Result<()> {
         let channel = grpc_config.connect(url).await?;
-        let mut grpc = SymbologyV2GrpcClient::new(channel);
-        grpc.upload_symbology_v2(UploadSymbologyV2Request {
+        let mut grpc = SymbologyGrpcClient::new(channel);
+        grpc.upload_symbology(UploadSymbologyRequest {
             products: self.products,
             options_series: self.options_series,
             execution_info: self.execution_info,

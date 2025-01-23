@@ -7,8 +7,9 @@ use anyhow::{bail, Result};
 use api::marketdata::CandleWidth;
 #[cfg(feature = "grpc")]
 use api::{
-    external::{marketdata::*, symbology::*},
     grpc::json_service::{marketdata_client::*, symbology_client::*},
+    marketdata::*,
+    symbology::*,
 };
 use arc_swap::ArcSwapOption;
 #[cfg(feature = "graphql")]
@@ -310,7 +311,7 @@ impl ArchitectClient {
         endpoint: &Endpoint,
         market_id: MarketId,
         // if None, subscribe for all widths available
-        candle_width: Option<Vec<CandleWidth>>,
+        candle_widths: Option<Vec<CandleWidth>>,
     ) -> Result<Streaming<Candle>> {
         let token: MetadataValue<_> = self.jwt_authorization()?.parse()?;
         let channel = endpoint.connect().await?;
@@ -321,9 +322,10 @@ impl ArchitectClient {
             });
         let stream = client
             .subscribe_candles(SubscribeCandlesRequest {
+                venue: None,
                 market_id: Some(market_id),
                 symbol: None,
-                candle_width,
+                candle_widths,
             })
             .await?
             .into_inner();
@@ -347,6 +349,7 @@ impl ArchitectClient {
             });
         let stream = client
             .subscribe_many_candles(SubscribeManyCandlesRequest {
+                venue: None,
                 market_ids,
                 symbols: None,
                 candle_width,
@@ -371,7 +374,11 @@ impl ArchitectClient {
                 Ok(req)
             });
         let stream = client
-            .subscribe_trades(SubscribeTradesRequest { market_id, symbol: None })
+            .subscribe_trades(SubscribeTradesRequest {
+                venue: None,
+                market_id,
+                symbol: None,
+            })
             .await?
             .into_inner();
         Ok(stream)
