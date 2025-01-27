@@ -17,6 +17,13 @@ pub struct SymbologyStore {
     pub updates: broadcast::Sender<SymbologyUpdate>,
 }
 
+impl std::fmt::Debug for SymbologyStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let product_count = self.inner.lock().snapshot.products.len();
+        write!(f, "SymbologyStore[{} products]", product_count)
+    }
+}
+
 #[derive(Deref, DerefMut)]
 pub struct IndexedSymbology {
     #[deref]
