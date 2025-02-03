@@ -3,7 +3,7 @@ use crate::synced::{SyncHandle, Synced};
 use anyhow::{anyhow, bail, Result};
 use api::{
     grpc::json_service::marketdata_client::MarketdataClient, marketdata::*,
-    utils::sequence::SequenceIdAndNumber,
+    symbology::MarketdataVenue, utils::sequence::SequenceIdAndNumber,
 };
 use arcstr::ArcStr;
 use futures::StreamExt;
@@ -33,10 +33,15 @@ pub struct L2Client {
 }
 
 impl L2Client {
-    pub async fn new(channel: Channel, symbol: String) -> Result<Self> {
+    pub async fn new(
+        channel: Channel,
+        symbol: String,
+        venue: Option<MarketdataVenue>,
+    ) -> Result<Self> {
         let mut client = MarketdataClient::new(channel);
         let mut updates = client
             .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest {
+                venue,
                 symbol: symbol.clone(),
             })
             .await?
@@ -66,7 +71,11 @@ impl L2Client {
         })
     }
 
-    pub async fn connect<D>(endpoint: D, symbol: String) -> Result<Self>
+    pub async fn connect<D>(
+        endpoint: D,
+        symbol: String,
+        venue: Option<MarketdataVenue>,
+    ) -> Result<Self>
     where
         D: TryInto<tonic::transport::Endpoint>,
         D::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
@@ -74,6 +83,7 @@ impl L2Client {
         let mut client = MarketdataClient::connect(endpoint).await?;
         let mut updates = client
             .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest {
+                venue,
                 symbol: symbol.clone(),
             })
             .await?
