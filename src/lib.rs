@@ -11,3 +11,5 @@ pub mod synced;
 
 // #[cfg(feature = "grpc")]
 // pub use client::ArchitectClient;
+
+pub use marketdata::MarketdataSource;
