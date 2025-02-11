@@ -1,5 +1,5 @@
 use super::LevelBook;
-use crate::synced::{SyncHandle, Synced};
+use crate::synced::{Synced, SyncedHandle};
 use anyhow::{anyhow, bail, Result};
 use api::{
     grpc::json_service::marketdata_client::MarketdataClient, marketdata::*,
@@ -28,7 +28,7 @@ pub struct L2Client {
     symbol: ArcStr,
     updates: Streaming<L2BookUpdate>,
     state: Arc<Mutex<L2ClientState>>,
-    ready: SyncHandle<bool>,
+    ready: Synced<bool>,
     alive: Arc<()>,
 }
 
@@ -66,7 +66,7 @@ impl L2Client {
             symbol: symbol.into(),
             updates,
             state: Arc::new(Mutex::new(state)),
-            ready: SyncHandle::new(true), // already got snapshot
+            ready: Synced::new(true), // already got snapshot
             alive: Arc::new(()),
         })
     }
@@ -108,7 +108,7 @@ impl L2Client {
             symbol: symbol.into(),
             updates,
             state: Arc::new(Mutex::new(state)),
-            ready: SyncHandle::new(true), // already got snapshot
+            ready: Synced::new(true), // already got snapshot
             alive: Arc::new(()),
         })
     }
@@ -134,7 +134,7 @@ impl L2Client {
         L2ClientHandle {
             symbol: self.symbol.clone(),
             state: self.state.clone(),
-            ready: self.ready.synced(),
+            ready: self.ready.handle(),
             alive: Arc::downgrade(&self.alive),
         }
     }
@@ -168,7 +168,7 @@ pub struct L2ClientHandle {
     #[allow(unused)]
     pub(super) symbol: ArcStr,
     pub(super) state: Arc<Mutex<L2ClientState>>,
-    pub(super) ready: Synced<bool>,
+    pub(super) ready: SyncedHandle<bool>,
     pub(super) alive: Weak<()>,
 }
 

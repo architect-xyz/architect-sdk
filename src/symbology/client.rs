@@ -1,7 +1,7 @@
 use super::store::SymbologyStore;
 use crate::{
     grpc::GrpcClientConfig,
-    synced::{SyncHandle, Synced},
+    synced::{Synced, SyncedHandle},
 };
 use anyhow::{bail, Result};
 use api::{
@@ -23,13 +23,13 @@ pub struct SymbologyClient {
     upstream_seqno: Option<SequenceIdAndNumber>,
     updates: Streaming<SymbologyUpdate>,
     pub store: SymbologyStore,
-    pub ready: SyncHandle<bool>,
+    pub ready: Synced<bool>,
 }
 
 #[derive(Clone)]
 pub struct SymbologyClientHandle {
     pub store: SymbologyStore,
-    pub ready: Synced<bool>,
+    pub ready: SyncedHandle<bool>,
 }
 
 impl SymbologyClient {
@@ -47,7 +47,7 @@ impl SymbologyClient {
             upstream_seqno: None,
             updates,
             store: SymbologyStore::new(),
-            ready: SyncHandle::new(false),
+            ready: Synced::new(false),
         })
     }
 
@@ -64,7 +64,7 @@ impl SymbologyClient {
     }
 
     pub fn handle(&self) -> SymbologyClientHandle {
-        SymbologyClientHandle { store: self.store.clone(), ready: self.ready.synced() }
+        SymbologyClientHandle { store: self.store.clone(), ready: self.ready.handle() }
     }
 
     pub async fn next(&mut self) -> Result<()> {
