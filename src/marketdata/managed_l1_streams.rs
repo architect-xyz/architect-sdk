@@ -34,7 +34,7 @@ impl ManagedL1Streams {
         ManagedL1StreamsHandle { tx_subs: self.tx_subs.clone() }
     }
 
-    pub async fn next(&mut self) -> Result<((MarketdataVenue, String), L1BookSnapshot)> {
+    pub async fn next(&mut self) -> Result<Option<((MarketdataVenue, String), L1BookSnapshot)>> {
         select_biased! {
             r = self.rx_subs.recv().fuse() => {
                 let action = r.ok_or_else(|| anyhow!("rx_subs dropped"))?;
@@ -43,7 +43,7 @@ impl ManagedL1Streams {
             r = Self::next_update(&mut self.updates).fuse() => {
                 if let Some((key, res)) = r {
                     match res {
-                        Ok(item) => return Ok((key, item)),
+                        Ok(item) => return Ok(Some((key, item))),
                         Err(e) => {
                             error!("error in l1 stream for {:?}: {e:?}", key);
                         }
@@ -51,7 +51,7 @@ impl ManagedL1Streams {
                 }
             }
         }
-        Err(anyhow!("unexpected end of stream"))
+        Ok(None)
     }
 
     // updates would hotloop with Ready(None) if empty
