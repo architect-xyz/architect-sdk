@@ -37,6 +37,7 @@ impl SymbologyStore {
         let snapshot = SymbologySnapshot {
             sequence: SequenceIdAndNumber::new_random(),
             products: BTreeMap::new(),
+            product_aliases: BTreeMap::new(),
             options_series: BTreeMap::new(),
             execution_info: BTreeMap::new(),
         };
@@ -46,6 +47,7 @@ impl SymbologyStore {
     pub fn clear(&self) {
         let mut inner = self.inner.lock();
         inner.products.clear();
+        inner.product_aliases.clear();
         inner.options_series.clear();
         inner.execution_info.clear();
     }
@@ -79,6 +81,9 @@ impl SymbologyStore {
         let update_to_send = update.clone();
         if let Some(action) = update.products {
             action.apply(&mut inner.products);
+        }
+        if let Some(action) = update.product_aliases {
+            action.apply2(&mut inner.product_aliases);
         }
         if let Some(action) = update.options_series {
             action.apply(&mut inner.options_series);
@@ -124,9 +129,10 @@ impl SymbologyStore {
         let mut update = SymbologyUpdate::default();
         update.sequence = inner.sequence;
         update.products =
-            Some(SnapshotOrUpdate::Snapshot { snapshot: inner.products.clone() });
+            Some(SnapshotOrUpdate1::Snapshot { snapshot: inner.products.clone() });
+        update.product_aliases = Some(inner.product_aliases.clone().into());
         update.options_series =
-            Some(SnapshotOrUpdate::Snapshot { snapshot: inner.options_series.clone() });
+            Some(SnapshotOrUpdate1::Snapshot { snapshot: inner.options_series.clone() });
         update.execution_info =
             Some(SnapshotOrUpdate2::Snapshot { snapshot: inner.execution_info.clone() });
         (update, inner.sequence)
