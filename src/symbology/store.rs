@@ -44,7 +44,7 @@ impl SymbologyStore {
         Self { inner: Arc::new(Mutex::new(IndexedSymbology { snapshot })), updates }
     }
 
-    pub fn clear(&self) {
+    pub fn clear(&mut self) {
         let mut inner = self.inner.lock();
         inner.products.clear();
         inner.product_aliases.clear();
@@ -88,30 +88,8 @@ impl SymbologyStore {
         if let Some(action) = update.options_series {
             action.apply(&mut inner.options_series);
         }
-        match update.execution_info {
-            Some(SnapshotOrUpdate2::Snapshot { snapshot }) => {
-                inner.execution_info = snapshot;
-            }
-            Some(SnapshotOrUpdate2::Update { updates }) => {
-                for action in updates {
-                    match action {
-                        AddOrRemove2::Add { symbol, info } => {
-                            inner
-                                .execution_info
-                                .entry(symbol)
-                                .or_insert_with(BTreeMap::new)
-                                .insert(info.execution_venue.clone(), info);
-                        }
-                        AddOrRemove2::Remove { symbol, venue } => {
-                            if let Some(by_venue) = inner.execution_info.get_mut(&symbol)
-                            {
-                                by_venue.remove(&venue);
-                            }
-                        }
-                    }
-                }
-            }
-            None => {}
+        if let Some(action) = update.execution_info {
+            action.apply2(&mut inner.execution_info);
         }
         let _ = self
             .updates
@@ -128,13 +106,10 @@ impl SymbologyStore {
         let inner = self.inner.lock();
         let mut update = SymbologyUpdate::default();
         update.sequence = inner.sequence;
-        update.products =
-            Some(SnapshotOrUpdate1::Snapshot { snapshot: inner.products.clone() });
+        update.products = Some(inner.products.clone().into());
         update.product_aliases = Some(inner.product_aliases.clone().into());
-        update.options_series =
-            Some(SnapshotOrUpdate1::Snapshot { snapshot: inner.options_series.clone() });
-        update.execution_info =
-            Some(SnapshotOrUpdate2::Snapshot { snapshot: inner.execution_info.clone() });
+        update.options_series = Some(inner.options_series.clone().into());
+        update.execution_info = Some(inner.execution_info.clone().into());
         (update, inner.sequence)
     }
 }
