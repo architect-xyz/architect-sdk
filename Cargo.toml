@@ -41,7 +41,7 @@ chrono = { workspace = true }
 clap = { workspace = true }
 derive_more = { workspace = true }
 dirs = { workspace = true }
-env_logger = { workspace = true }
+# env_logger = { workspace = true }
 futures = { workspace = true }
 fxhash = { workspace = true }
 graphql_client = { workspace = true, optional = true }
@@ -60,9 +60,9 @@ tonic = { workspace = true, optional = true }
 url = { workspace = true }
 uuid = { workspace = true }
 
-[dev-dependencies]
-env_logger = { workspace = true }
-inquire = { workspace = true }
+# [dev-dependencies]
+# env_logger = { workspace = true }
+# inquire = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = [
