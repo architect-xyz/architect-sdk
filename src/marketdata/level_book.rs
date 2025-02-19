@@ -241,7 +241,7 @@ fn condense_from_levels<'a>(
     dst.extend(
         levels
             .map(|(price, size)| (group(*price), *size))
-            .group_by(|(p, _)| *p)
+            .chunk_by(|(p, _)| *p)
             .into_iter()
             .take(num_levels)
             .map(|(price, sizes)| {
