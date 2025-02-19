@@ -10,20 +10,20 @@ license = "AGPL-3.0-only"
 name = "architect-sdk"
 version = "7.9.5"
 
-[[example]]
-name = "subscribe_candles"
+# [[example]]
+# name = "subscribe_candles"
 
-[[example]]
-name = "subscribe_l1_book_snapshots"
+# [[example]]
+# name = "subscribe_l1_book_snapshots"
 
-[[example]]
-name = "subscribe_l2_book"
+# [[example]]
+# name = "subscribe_l2_book"
 
-[[example]]
-name = "subscribe_trades"
+# [[example]]
+# name = "subscribe_trades"
 
-[[example]]
-name = "use_managed_marketdata"
+# [[example]]
+# name = "use_managed_marketdata"
 
 [features]
 all = ["graphql", "grpc"]
