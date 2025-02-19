@@ -34,7 +34,9 @@ impl ManagedL1Streams {
         ManagedL1StreamsHandle { tx_subs: self.tx_subs.clone() }
     }
 
-    pub async fn next(&mut self) -> Result<Option<((MarketdataVenue, String), L1BookSnapshot)>> {
+    pub async fn next(
+        &mut self,
+    ) -> Result<Option<((MarketdataVenue, String), L1BookSnapshot)>> {
         select_biased! {
             r = self.rx_subs.recv().fuse() => {
                 let action = r.ok_or_else(|| anyhow!("rx_subs dropped"))?;
