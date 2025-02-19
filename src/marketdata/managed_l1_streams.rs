@@ -96,10 +96,8 @@ impl ManagedL1Streams {
                             }
                         }
                     }
-                } else {
-                    if let Some(tx) = tx {
-                        let _ = tx.send(Err(anyhow!("no marketdata source for venue")));
-                    }
+                } else if let Some(tx) = tx {
+                    let _ = tx.send(Err(anyhow!("no marketdata source for venue")));
                 }
             }
             SubscribeOrUnsubscribe::Unsubscribe(key) => {

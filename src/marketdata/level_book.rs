@@ -101,14 +101,8 @@ impl LevelBook {
     /// return the best price and quantity given a direction
     pub fn best(&self, dir: Dir) -> Option<(Decimal, Decimal)> {
         match dir {
-            Dir::Buy => match self.buy.iter().next_back() {
-                None => return None,
-                Some((price, size)) => return Some((*price, *size)),
-            },
-            Dir::Sell => match self.sell.iter().next() {
-                None => return None,
-                Some((price, size)) => return Some((*price, *size)),
-            },
+            Dir::Buy => self.buy.iter().next_back().map(|(price, size)| (*price, *size)),
+            Dir::Sell => self.sell.iter().next().map(|(price, size)| (*price, *size)),
         }
     }
 
@@ -215,7 +209,7 @@ impl LevelLike for CondensedLevel {
     }
 }
 
-impl<'a> LevelLike for &'a CondensedLevel {
+impl LevelLike for &CondensedLevel {
     fn price(&self) -> Decimal {
         self.price
     }

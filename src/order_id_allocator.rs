@@ -33,6 +33,12 @@ pub struct AtomicOrderIdAllocator {
     pub seqno: AtomicU64,
 }
 
+impl Default for AtomicOrderIdAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AtomicOrderIdAllocator {
     pub fn new() -> Self {
         Self { seqid: Uuid::new_v4(), seqno: AtomicU64::new(0) }

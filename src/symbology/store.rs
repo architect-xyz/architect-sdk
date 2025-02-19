@@ -31,6 +31,12 @@ pub struct IndexedSymbology {
     pub snapshot: SymbologySnapshot,
 }
 
+impl Default for SymbologyStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbologyStore {
     pub fn new() -> Self {
         let (updates, _) = broadcast::channel(1000);

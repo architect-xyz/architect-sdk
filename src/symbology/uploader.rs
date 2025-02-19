@@ -15,6 +15,12 @@ pub struct SymbologyUploader {
     pub execution_info: BTreeMap<String, BTreeMap<ExecutionVenue, ExecutionInfo>>,
 }
 
+impl Default for SymbologyUploader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbologyUploader {
     pub fn new() -> Self {
         Self {
@@ -70,7 +76,7 @@ impl SymbologyUploader {
     ) {
         self.execution_info
             .entry(symbol.as_ref().to_string())
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .insert(venue, info);
     }
 }

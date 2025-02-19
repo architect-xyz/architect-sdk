@@ -89,7 +89,7 @@ impl GrpcClientConfig {
                 let add_ca = Certificate::from_pem(&add_ca_pem);
                 tls_config = tls_config.ca_certificate(add_ca);
                 // useful notice
-                if endpoint.uri().host().is_some_and(|h| is_ip_address(h)) {
+                if endpoint.uri().host().is_some_and(is_ip_address) {
                     error!("url is not a domain name but scheme is https; this will always fail tls domain verification");
                     error!("if connecting to 127.0.0.1--use \"localhost\" instead")
                 }

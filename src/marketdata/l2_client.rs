@@ -125,7 +125,7 @@ impl L2Client {
             Ok(sin) => Some(sin),
             Err(e) => {
                 error!("error applying L2 book update for {}: {:?}", self.symbol, e);
-                return None;
+                None
             }
         }
     }
