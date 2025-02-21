@@ -12,7 +12,8 @@ pub struct SymbologyUploader {
     pub products: BTreeMap<Product, ProductInfo>,
     pub product_aliases: BTreeMap<AliasKind, BTreeMap<String, Product>>,
     pub options_series: BTreeMap<OptionsSeries, OptionsSeriesInfo>,
-    pub execution_info: BTreeMap<String, BTreeMap<ExecutionVenue, ExecutionInfo>>,
+    pub execution_info:
+        BTreeMap<TradableProduct, BTreeMap<ExecutionVenue, ExecutionInfo>>,
 }
 
 impl Default for SymbologyUploader {
@@ -68,15 +69,12 @@ impl SymbologyUploader {
         self.product_aliases.entry(alias_kind).or_default().insert(symbol_alias, symbol);
     }
 
-    pub fn add_execution_info<S: AsRef<str>>(
+    pub fn add_execution_info(
         &mut self,
-        symbol: S,
+        symbol: TradableProduct,
         venue: ExecutionVenue,
         info: ExecutionInfo,
     ) {
-        self.execution_info
-            .entry(symbol.as_ref().to_string())
-            .or_default()
-            .insert(venue, info);
+        self.execution_info.entry(symbol).or_default().insert(venue, info);
     }
 }
