@@ -38,7 +38,8 @@ impl SymbologyUploader {
         grpc_config: &GrpcClientConfig,
     ) -> Result<()> {
         let channel = grpc_config.connect(url).await?;
-        let mut grpc = SymbologyGrpcClient::new(channel);
+        let mut grpc = SymbologyGrpcClient::new(channel)
+            .max_encoding_message_size(100 * 1024 * 1024);
         grpc.upload_symbology(UploadSymbologyRequest {
             products: self.products,
             product_aliases: self.product_aliases,
