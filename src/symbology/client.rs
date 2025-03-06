@@ -60,7 +60,7 @@ impl SymbologyClient {
             .max_decoding_message_size(100 * 1024 * 1024)
             .max_encoding_message_size(100 * 1024 * 1024);
         debug!("subscribing to symbology updates...");
-            self.grpc.subscribe_symbology(SubscribeSymbology {}).await?.into_inner();
+        self.grpc.subscribe_symbology(SubscribeSymbology {}).await?.into_inner();
         Ok(())
     }
 
