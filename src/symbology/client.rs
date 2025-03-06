@@ -38,8 +38,8 @@ impl SymbologyClient {
         debug!("connecting to {}...", endpoint.uri());
         let channel = grpc_config.connect_to(endpoint.clone()).await?;
         let mut grpc = SymbologyGrpcClient::new(channel)
-            .max_encoding_message_size(1024 * 1024 * 10)
-            .max_decoding_message_size(1024 * 1024 * 10);
+            .max_decoding_message_size(100 * 1024 * 1024)
+            .max_encoding_message_size(100 * 1024 * 1024);
         debug!("subscribing to symbology updates...");
         let updates = grpc.subscribe_symbology(SubscribeSymbology {}).await?.into_inner();
         Ok(Self {
@@ -57,8 +57,8 @@ impl SymbologyClient {
         debug!("reconnecting to {}...", self.grpc_endpoint.uri());
         let channel = self.grpc_config.connect_to(self.grpc_endpoint.clone()).await?;
         self.grpc = SymbologyGrpcClient::new(channel)
-            .max_encoding_message_size(1024 * 1024 * 10)
-            .max_decoding_message_size(1024 * 1024 * 10);
+            .max_decoding_message_size(100 * 1024 * 1024)
+            .max_encoding_message_size(100 * 1024 * 1024);
         debug!("subscribing to symbology updates...");
         self.store.clear();
         self.upstream_seqno = None;
