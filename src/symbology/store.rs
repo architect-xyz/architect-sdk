@@ -2,7 +2,8 @@ use crate::grpc::GrpcClientConfig;
 use anyhow::{bail, Result};
 use api::{
     grpc::json_service::symbology_client::SymbologyClient as SymbologyGrpcClient,
-    symbology::protocol::*, utils::sequence::SequenceIdAndNumber,
+    symbology::{protocol::*, ExecutionInfo, ExecutionVenue, TradableProduct},
+    utils::sequence::SequenceIdAndNumber,
 };
 use derive_more::{Deref, DerefMut};
 use parking_lot::Mutex;
@@ -117,5 +118,20 @@ impl SymbologyStore {
         update.options_series = Some(inner.options_series.clone().into());
         update.execution_info = Some(inner.execution_info.clone().into());
         (update, inner.sequence)
+    }
+
+    // CR alee: not really sure this is a great idea in general without
+    // thinking harder about what the sequence number means.  But for now
+    // it's useful.
+    pub fn add_execution_info(
+        &self,
+        execution_info: BTreeMap<
+            TradableProduct,
+            BTreeMap<ExecutionVenue, ExecutionInfo>,
+        >,
+    ) {
+        let mut inner = self.inner.lock();
+        // inner.sequence.advance();
+        inner.execution_info.extend(execution_info);
     }
 }
