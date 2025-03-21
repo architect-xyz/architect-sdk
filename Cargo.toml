@@ -8,7 +8,7 @@ homepage = "https://www.architect.xyz"
 keywords = ["crypto", "hft", "trading", "finance"]
 license = "AGPL-3.0-only"
 name = "architect-sdk"
-version = "7.19.0"
+version = "7.19.1"
 
 # [[example]]
 # name = "subscribe_candles"
@@ -34,7 +34,7 @@ grpc = ["api/grpc", "graphql", "hickory-resolver", "tonic"]
 [dependencies]
 anyhow = { workspace = true }
 # CR alee: rename this to architect-api for examples friendliness?
-api = { package = "architect-api", version = "7.19.0", path = "../api" }
+api = { package = "architect-api", version = "7.19.1", path = "../api" }
 arc-swap = { workspace = true }
 arcstr = { workspace = true }
 chrono = { workspace = true }
