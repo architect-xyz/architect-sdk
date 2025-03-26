@@ -1,18 +1,18 @@
 //! Useful/safe/Architect-tuned abstractions for gRPC clients
 
-use anyhow::{anyhow, Context, Result};
+#[cfg(feature = "grpc-tls")]
+use anyhow::Context;
+use anyhow::Result;
 use api::HumanDuration;
 use clap::Args;
-use log::error;
 use serde::{Deserialize, Serialize};
-use std::{
-    net::IpAddr,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
-use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
+use std::path::PathBuf;
+#[cfg(feature = "grpc-tls")]
+use tonic::transport::{Certificate, ClientTlsConfig};
+use tonic::transport::{Channel, Endpoint};
 use url::Url;
 
+#[cfg(feature = "grpc-tls")]
 const ARCHITECT_CA: &[u8] = include_bytes!("ca.crt");
 
 #[derive(Debug, Clone, Serialize, Deserialize, Args)]
@@ -78,6 +78,7 @@ impl GrpcClientConfig {
         if let Some(dur) = self.connect_timeout {
             endpoint = endpoint.connect_timeout((*dur).to_std()?);
         }
+        #[cfg(feature = "grpc-tls")]
         if endpoint.uri().scheme_str() == Some("https") {
             let ca = Certificate::from_pem(ARCHITECT_CA);
             let mut tls_config =
@@ -90,8 +91,8 @@ impl GrpcClientConfig {
                 tls_config = tls_config.ca_certificate(add_ca);
                 // useful notice
                 if endpoint.uri().host().is_some_and(is_ip_address) {
-                    error!("url is not a domain name but scheme is https; this will always fail tls domain verification");
-                    error!("if connecting to 127.0.0.1--use \"localhost\" instead")
+                    log::error!("url is not a domain name but scheme is https; this will always fail tls domain verification");
+                    log::error!("if connecting to 127.0.0.1--use \"localhost\" instead")
                 }
             }
             if self.tls_client || self.tls_identity.is_some() {
@@ -105,7 +106,7 @@ impl GrpcClientConfig {
                 } else {
                     // try the Architect/netidx default location
                     let mut cert_path = dirs::config_dir().ok_or_else(|| {
-                        anyhow!("could not determine default config directory")
+                        anyhow::anyhow!("could not determine default config directory")
                     })?;
                     cert_path.push("netidx");
                     cert_path.push("license.crt");
@@ -119,6 +120,10 @@ impl GrpcClientConfig {
             }
             endpoint = endpoint.tls_config(tls_config)?;
         }
+        #[cfg(feature = "grpc-tls")]
+        if endpoint.uri().scheme_str() == Some("https") {
+            anyhow::bail!("endpoint schema is https but grpc-tls is not enabled");
+        }
         let channel = if self.connect_lazy {
             endpoint.connect_lazy()
         } else {
@@ -128,17 +133,20 @@ impl GrpcClientConfig {
     }
 }
 
+#[cfg(feature = "grpc-tls")]
 fn is_ip_address(host: &str) -> bool {
-    IpAddr::from_str(host).is_ok()
+    use std::str::FromStr;
+    std::net::IpAddr::from_str(host).is_ok()
 }
 
 /// Canonical reading of a TLS identity from file for tonic/gRPC
 ///
 /// If `pkey_path` isn't provided, look for it where `cert_path`
 /// is but with the `.key` extension.
+#[cfg(feature = "grpc-tls")]
 pub async fn grpc_tls_identity_from_pem_files(
-    cert_path: impl AsRef<Path>,
-    pkey_path: Option<impl AsRef<Path>>,
+    cert_path: impl AsRef<std::path::Path>,
+    pkey_path: Option<impl AsRef<std::path::Path>>,
 ) -> Result<tonic::transport::Identity> {
     let cert_path = cert_path.as_ref().to_owned();
     let pkey_path = match pkey_path {

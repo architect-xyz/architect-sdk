@@ -30,6 +30,7 @@ all = ["graphql", "grpc"]
 default = ["grpc"]
 graphql = ["graphql_client", "reqwest"]
 grpc = ["api/grpc", "graphql", "hickory-resolver", "tonic"]
+grpc-tls = ["tonic/tls-aws-lc", "tonic/tls-native-roots"]
 
 [dependencies]
 anyhow = { workspace = true }
