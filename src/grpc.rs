@@ -120,7 +120,7 @@ impl GrpcClientConfig {
             }
             endpoint = endpoint.tls_config(tls_config)?;
         }
-        #[cfg(feature = "grpc-tls")]
+        #[cfg(not(feature = "grpc-tls"))]
         if endpoint.uri().scheme_str() == Some("https") {
             anyhow::bail!("endpoint schema is https but grpc-tls is not enabled");
         }
