@@ -31,6 +31,8 @@ default = ["grpc"]
 graphql = ["graphql_client", "reqwest"]
 grpc = ["api/grpc", "graphql", "hickory-resolver", "tonic"]
 grpc-tls = ["tonic/tls-aws-lc", "tonic/tls-native-roots"]
+# enable this feature to access sdk::load_config
+yaml = ["serde_yaml"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -54,6 +56,7 @@ parking_lot = { workspace = true }
 reqwest = { workspace = true, optional = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
+serde_yaml = { workspace = true, optional = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
