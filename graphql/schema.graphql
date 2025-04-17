@@ -1,3 +1,5 @@
+scalar ExecutionVenue
+
 schema {
   query: QueryRoot
   mutation: MutationRoot
@@ -921,6 +923,23 @@ type Market {
   lastTradingDate: DateTime
   firstNoticeDate: DateTime
   cmeProductGroupInfo: CmeProductGroupInfo
+  productCatalogInfo: ProductCatalogInfo
+}
+
+type ProductCatalogInfo {
+  exchange: ExecutionVenue
+  exchange_product_code: String
+  quote_currency: Product
+  multiplier: Decimal
+  category: String
+  sub_category: String
+  short_description: String
+  long_description: String
+  schedule_description: String
+  settle_method: String
+  price_display_format: String
+  info_url: String
+  cqg_contract_symbol: String
 }
 
 type MarketSnapshot {
@@ -1210,6 +1229,8 @@ type QueryRoot {
   coinInfo(product: ProductId!): CoinInfo
   "Get CME product group info."
   cmeProductGroupInfos: [CmeProductGroupInfo!]!
+  "Get product catalog info."
+  productCatalogInfos: [ProductCatalogInfo!]!
   "Find a generic algo order and its details by algo order ID."
   algoOrder(orderId: OrderId!): AlgoOrder
   "Find and return generic algo order status by algo order ID."

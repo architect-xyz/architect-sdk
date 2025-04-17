@@ -2,7 +2,9 @@ use crate::grpc::GrpcClientConfig;
 use anyhow::{bail, Result};
 use api::{
     grpc::json_service::symbology_client::SymbologyClient as SymbologyGrpcClient,
-    symbology::{protocol::*, ExecutionInfo, ExecutionVenue, TradableProduct},
+    symbology::{
+        protocol::*, ExecutionInfo, ExecutionVenue, ProductCatalogInfo, TradableProduct,
+    },
     utils::sequence::SequenceIdAndNumber,
 };
 use derive_more::{Deref, DerefMut};
@@ -47,6 +49,7 @@ impl SymbologyStore {
             product_aliases: BTreeMap::new(),
             options_series: BTreeMap::new(),
             execution_info: BTreeMap::new(),
+            product_catalog: BTreeMap::new(),
         };
         Self { inner: Arc::new(Mutex::new(IndexedSymbology { snapshot })), updates }
     }
@@ -57,6 +60,7 @@ impl SymbologyStore {
         inner.product_aliases.clear();
         inner.options_series.clear();
         inner.execution_info.clear();
+        inner.product_catalog.clear();
     }
 
     /// Connect to and download a symbology snapshot from a URL.
@@ -68,10 +72,12 @@ impl SymbologyStore {
         grpc_config: &GrpcClientConfig,
     ) -> Result<Self> {
         let channel = grpc_config.connect(url).await?;
-        let mut grpc = SymbologyGrpcClient::new(channel);
+        let mut grpc =
+            SymbologyGrpcClient::new(channel).max_decoding_message_size(10 * 1024 * 1024);
         let mut updates =
             grpc.subscribe_symbology(SubscribeSymbology {}).await?.into_inner();
         let t = Self::new();
+
         match updates.message().await {
             Err(e) => bail!("error reading from stream: {:?}", e),
             Ok(None) => bail!("symbology updates stream ended prematurely"),
@@ -91,6 +97,9 @@ impl SymbologyStore {
         }
         if let Some(action) = update.product_aliases {
             action.apply2(&mut inner.product_aliases);
+        }
+        if let Some(action) = update.product_catalog {
+            action.apply2(&mut inner.product_catalog);
         }
         if let Some(action) = update.options_series {
             action.apply(&mut inner.options_series);
@@ -115,9 +124,23 @@ impl SymbologyStore {
         update.sequence = inner.sequence;
         update.products = Some(inner.products.clone().into());
         update.product_aliases = Some(inner.product_aliases.clone().into());
+        update.product_catalog = Some(inner.product_catalog.clone().into());
         update.options_series = Some(inner.options_series.clone().into());
         update.execution_info = Some(inner.execution_info.clone().into());
         (update, inner.sequence)
+    }
+
+    pub fn product_catalog(&self, exchange: &str) -> Option<Vec<ProductCatalogInfo>> {
+        let inner = self.inner.lock();
+        if let Some(items) = inner.product_catalog.get(exchange) {
+            let mut catalog = vec![];
+            for (_, item) in items {
+                catalog.push(item.clone());
+            }
+            Some(catalog)
+        } else {
+            None
+        }
     }
 
     // CR alee: not really sure this is a great idea in general without

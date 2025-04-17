@@ -79,3 +79,20 @@ impl SymbologyUploader {
         self.execution_info.entry(symbol).or_default().insert(venue, info);
     }
 }
+
+pub async fn upload_product_catalog(
+    url: &Url,
+    grpc_config: &GrpcClientConfig,
+    exchange: ExecutionVenue,
+    product_catalog: Vec<ProductCatalogInfo>,
+) -> Result<()> {
+    let channel = grpc_config.connect(url).await?;
+    let mut grpc =
+        SymbologyGrpcClient::new(channel).max_encoding_message_size(100 * 1024 * 1024);
+    grpc.upload_product_catalog(UploadProductCatalogRequest {
+        exchange,
+        product_catalog,
+    })
+    .await?;
+    Ok(())
+}
