@@ -79,6 +79,7 @@ impl ManagedL1Streams {
                     // modify the snapshot requests on the fly?
                     match client
                         .subscribe_l1_book_snapshots(SubscribeL1BookSnapshotsRequest {
+                            venue: None,
                             symbols: Some(vec![symbol.clone()]),
                         })
                         .await
