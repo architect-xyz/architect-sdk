@@ -32,7 +32,7 @@ impl<T> SyncedHandle<T> {
         f: impl FnMut(&T) -> bool,
     ) -> Result<()> {
         if let Some(timeout) = timeout {
-            if let Err(_) = tokio::time::timeout(timeout, self.0.wait_for(f)).await {
+            if tokio::time::timeout(timeout, self.0.wait_for(f)).await.is_err() {
                 bail!("timed out waiting for book to sync");
             }
         } else {

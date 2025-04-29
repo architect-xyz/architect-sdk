@@ -120,13 +120,14 @@ impl SymbologyStore {
 
     pub fn snapshot_update(&self) -> (SymbologyUpdate, SequenceIdAndNumber) {
         let inner = self.inner.lock();
-        let mut update = SymbologyUpdate::default();
-        update.sequence = inner.sequence;
-        update.products = Some(inner.products.clone().into());
-        update.product_aliases = Some(inner.product_aliases.clone().into());
-        update.product_catalog = Some(inner.product_catalog.clone().into());
-        update.options_series = Some(inner.options_series.clone().into());
-        update.execution_info = Some(inner.execution_info.clone().into());
+        let update = SymbologyUpdate {
+            sequence: inner.sequence,
+            products: Some(inner.products.clone().into()),
+            product_aliases: Some(inner.product_aliases.clone().into()),
+            product_catalog: Some(inner.product_catalog.clone().into()),
+            options_series: Some(inner.options_series.clone().into()),
+            execution_info: Some(inner.execution_info.clone().into()),
+        };
         (update, inner.sequence)
     }
 
@@ -134,7 +135,7 @@ impl SymbologyStore {
         let inner = self.inner.lock();
         if let Some(items) = inner.product_catalog.get(exchange) {
             let mut catalog = vec![];
-            for (_, item) in items {
+            for item in items.values() {
                 catalog.push(item.clone());
             }
             Some(catalog)

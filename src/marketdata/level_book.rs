@@ -20,7 +20,7 @@ pub trait LevelLike {
     fn total(&self) -> Option<Decimal>;
 }
 
-impl<'a> LevelLike for (&Decimal, &Decimal) {
+impl LevelLike for (&Decimal, &Decimal) {
     fn price(&self) -> Decimal {
         *self.0
     }
