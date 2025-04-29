@@ -22,6 +22,17 @@ impl Default for SymbologyUploader {
     }
 }
 
+impl From<SymbologySnapshot> for SymbologyUploader {
+    fn from(snapshot: SymbologySnapshot) -> Self {
+        Self {
+            products: snapshot.products,
+            product_aliases: snapshot.product_aliases,
+            options_series: snapshot.options_series,
+            execution_info: snapshot.execution_info,
+        }
+    }
+}
+
 impl SymbologyUploader {
     pub fn new() -> Self {
         Self {
