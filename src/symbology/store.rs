@@ -72,8 +72,8 @@ impl SymbologyStore {
         grpc_config: &GrpcClientConfig,
     ) -> Result<Self> {
         let channel = grpc_config.connect(url).await?;
-        let mut grpc =
-            SymbologyGrpcClient::new(channel).max_decoding_message_size(10 * 1024 * 1024);
+        let mut grpc = SymbologyGrpcClient::new(channel)
+            .max_decoding_message_size(100 * 1024 * 1024);
         let mut updates =
             grpc.subscribe_symbology(SubscribeSymbology {}).await?.into_inner();
         let t = Self::new();
