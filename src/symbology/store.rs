@@ -9,7 +9,10 @@ use api::{
 };
 use derive_more::{Deref, DerefMut};
 use parking_lot::Mutex;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 use tokio::sync::broadcast;
 use url::Url;
 
@@ -142,6 +145,33 @@ impl SymbologyStore {
         } else {
             None
         }
+    }
+
+    pub fn symbols(&self) -> Vec<String> {
+        let mut symbols = BTreeSet::default();
+        symbols.extend(self.inner.lock().products.keys().map(|k| k.to_string()));
+        symbols.extend(self.inner.lock().execution_info.keys().map(|k| k.to_string()));
+        symbols.into_iter().collect()
+    }
+
+    pub fn execution_info(
+        &self,
+        symbol: impl AsRef<str>,
+        execution_venue: Option<&ExecutionVenue>,
+    ) -> BTreeMap<ExecutionVenue, ExecutionInfo> {
+        let mut res = BTreeMap::new();
+        if let Some(infos) = self.inner.lock().execution_info.get(symbol.as_ref()) {
+            if let Some(venue) = execution_venue {
+                if let Some(info) = infos.get(venue) {
+                    res.insert(venue.clone(), info.clone());
+                }
+            } else {
+                for (venue, info) in infos.iter() {
+                    res.insert(venue.clone(), info.clone());
+                }
+            }
+        }
+        res
     }
 
     // CR alee: not really sure this is a great idea in general without
