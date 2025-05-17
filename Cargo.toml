@@ -26,10 +26,9 @@ version = "10.5.5"
 # name = "use_managed_marketdata"
 
 [features]
-all = ["graphql", "grpc"]
-default = ["grpc"]
-graphql = ["graphql_client", "reqwest"]
-grpc = ["api/grpc", "graphql", "hickory-resolver", "tonic"]
+all = ["grpc"]
+default = ["grpc", "grpc-tls"]
+grpc = ["api/grpc", "hickory-resolver", "tonic"]
 grpc-tls = ["tonic/tls-aws-lc", "tonic/tls-native-roots"]
 # enable this feature to access sdk::load_config
 yaml = ["serde_yaml"]
@@ -47,13 +46,11 @@ dirs = { workspace = true }
 # env_logger = { workspace = true }
 futures = { workspace = true }
 fxhash = { workspace = true }
-graphql_client = { workspace = true, optional = true }
 hickory-resolver = { workspace = true, optional = true }
 itertools = { workspace = true }
 log = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
-reqwest = { workspace = true, optional = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true, optional = true }

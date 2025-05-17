@@ -1,176 +1,92 @@
-//! General purpose client for Architect
+//! General purpose client for Architect.
+//!
+//! Provides a convenience interface for the underlying gRPC calls, handles
+//! service discovery and authentication in the background, and also implements
+//! some useful utilities and patterns for marketdata and orderflow.
 
-#[cfg(feature = "graphql")]
-use anyhow::anyhow;
-use anyhow::{bail, Result};
-#[cfg(feature = "grpc")]
-use api::marketdata::CandleWidth;
-#[cfg(feature = "grpc")]
+use anyhow::{anyhow, Result};
 use api::{
-    grpc::json_service::{marketdata_client::*, symbology_client::*},
-    marketdata::*,
-    symbology::*,
+    accounts::*,
+    auth::*,
+    core::*,
+    folio::*,
+    grpc::json_service::{
+        accounts_client::*, auth_client::*, core_client::*, folio_client::*,
+        marketdata_client::*, oms_client::*, symbology_client::*,
+    },
+    marketdata::{CandleWidth, *},
+    oms::*,
+    orderflow::*,
+    symbology::{protocol::*, *},
+    *,
 };
 use arc_swap::ArcSwapOption;
-#[cfg(feature = "graphql")]
-use graphql_client::{GraphQLQuery, Response};
-#[cfg(feature = "grpc")]
-use hickory_resolver::{config::*, TokioAsyncResolver};
-#[cfg(feature = "graphql")]
-use log::debug;
-use std::sync::Arc;
-#[cfg(feature = "grpc")]
+use arcstr::ArcStr;
+use chrono::{DateTime, Utc};
+use hickory_resolver::TokioResolver;
+use log::{error, info};
+use parking_lot::RwLock;
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tonic::{
     codec::Streaming,
     metadata::MetadataValue,
-    transport::{Certificate, ClientTlsConfig, Endpoint},
-    Request,
+    transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Uri},
+    IntoRequest, Request,
 };
-#[cfg(feature = "grpc")]
-use url::Host;
-use url::Url;
 
 const ARCHITECT_CA: &[u8] = include_bytes!("ca.crt");
 
-#[derive(Debug)]
-pub struct ArchitectClientConfig {
-    pub hostname: Option<String>,
-    pub port: Option<u16>,
-    pub no_tls: bool,
-    pub api_key: Option<String>,
-    pub api_secret: Option<String>,
-}
-
-impl Default for ArchitectClientConfig {
-    fn default() -> Self {
-        Self {
-            hostname: Some("app.architect.co".to_string()),
-            port: None,
-            no_tls: false,
-            api_key: None,
-            api_secret: None,
-        }
-    }
-}
+// convenience re-exports
+pub use api::{
+    folio::{HistoricalFillsRequest, HistoricalOrdersRequest},
+    oms::{CancelOrderRequest, PlaceOrderRequest},
+};
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub struct ArchitectClient {
-    inner: Arc<ArchitectClientInner>,
-    #[cfg(feature = "grpc")]
+pub struct Architect {
+    core: Channel,
+    marketdata: Arc<RwLock<HashMap<MarketdataVenue, Channel>>>,
+    hmart: Channel,
     ca: Arc<Certificate>,
+    api_key: ArcStr,
+    api_secret: ArcStr,
+    jwt: Arc<ArcSwapOption<(ArcStr, DateTime<Utc>)>>,
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-struct ArchitectClientInner {
-    graphql_endpoint: Option<Url>,
-    #[cfg(feature = "graphql")]
-    graphql_client: reqwest::Client,
-    graphql_authorization: Option<String>,
-    architect_jwt: ArcSwapOption<String>,
-}
-
-impl Default for ArchitectClient {
-    fn default() -> Self {
-        Self::new(ArchitectClientConfig::default()).unwrap()
+impl Architect {
+    pub async fn connect(
+        api_key: impl AsRef<str>,
+        api_secret: impl AsRef<str>,
+    ) -> Result<Self> {
+        Self::connect_to("app.architect.co", api_key, api_secret).await
     }
-}
 
-impl ArchitectClient {
-    pub fn new(config: ArchitectClientConfig) -> Result<Self> {
-        let installation_base = if let Some(hostname) = config.hostname.as_ref() {
-            let mut base = String::new();
-            base.push_str(if config.no_tls { "http://" } else { "https://" });
-            base.push_str(hostname);
-            if let Some(port) = config.port {
-                base.push_str(&format!(":{port}"));
-            }
-            Some(Url::parse(&base)?)
-        } else {
-            None
-        };
-        let graphql_endpoint = if let Some(base) = installation_base.as_ref() {
-            Some(base.join("graphql")?)
-        } else {
-            None
-        };
-        #[cfg(feature = "graphql")]
-        let graphql_client = reqwest::Client::new();
-        let graphql_authorization = match (config.api_key, config.api_secret) {
-            (Some(key), Some(secret)) => Some(format!("Basic {key} {secret}")),
-            (Some(_), None) => bail!("api_key is provided but api_secret is not"),
-            (None, Some(_)) => bail!("api_secret is provided but api_key is not"),
-            (None, None) => None,
-        };
-        let inner = ArchitectClientInner {
-            graphql_endpoint,
-            #[cfg(feature = "graphql")]
-            graphql_client,
-            graphql_authorization,
-            architect_jwt: ArcSwapOption::empty(),
-        };
-        Ok(Self {
-            inner: Arc::new(inner),
-            #[cfg(feature = "grpc")]
+    pub async fn connect_to(
+        endpoint: impl AsRef<str>,
+        api_key: impl AsRef<str>,
+        api_secret: impl AsRef<str>,
+    ) -> Result<Self> {
+        let endpoint = Self::resolve_endpoint(endpoint).await?;
+        let hmart_endpoint =
+            Self::resolve_endpoint("https://historical.marketdata.architect.co").await?;
+        let core = endpoint.connect().await?;
+        let marketdata = Arc::new(RwLock::new(HashMap::new()));
+        let hmart = hmart_endpoint.connect_lazy();
+        let t = Self {
+            core,
+            marketdata,
+            hmart,
             ca: Arc::new(Certificate::from_pem(ARCHITECT_CA)),
-        })
-    }
-
-    #[cfg(feature = "graphql")]
-    fn graphql_endpoint(&self) -> Result<&str> {
-        self.inner
-            .graphql_endpoint
-            .as_ref()
-            .map(|url| url.as_str())
-            .ok_or_else(|| anyhow!("graphql_endpoint not set"))
-    }
-
-    #[cfg(feature = "graphql")]
-    fn graphql_authorization(&self) -> Result<&str> {
-        self.inner
-            .graphql_authorization
-            .as_deref()
-            .ok_or_else(|| anyhow!("graphql authorization not set"))
-    }
-
-    #[cfg(feature = "graphql")]
-    pub async fn refresh_jwt(&self) -> Result<()> {
-        use super::graphql::{
-            create_jwt::{ResponseData, Variables},
-            CreateJwt,
+            api_key: ArcStr::from(api_key.as_ref()),
+            api_secret: ArcStr::from(api_secret.as_ref()),
+            jwt: Arc::new(ArcSwapOption::empty()),
         };
-        let authorization = self.graphql_authorization()?;
-        let body = CreateJwt::build_query(Variables);
-        let res = self
-            .inner
-            .graphql_client
-            .post(self.graphql_endpoint()?)
-            .json(&body)
-            .header(reqwest::header::AUTHORIZATION, authorization)
-            .send()
-            .await?;
-        let res_body: Response<ResponseData> = res.json().await?;
-        if let Some(errors) = res_body.errors {
-            bail!("error in response: {errors:?}");
-        }
-        let res_data = res_body.data.ok_or_else(|| anyhow!("no data in response"))?;
-        debug!("refreshed jwt: {}", res_data.create_jwt);
-        self.inner
-            .architect_jwt
-            .store(Some(Arc::new(format!("Bearer {}", res_data.create_jwt))));
-        Ok(())
+        t.refresh_jwt(false).await?;
+        t.discover_marketdata().await?;
+        Ok(t)
     }
 
-    /// Get the JWT authorization header value
-    fn jwt_authorization(&self) -> Result<Arc<String>> {
-        self.inner
-            .architect_jwt
-            .load_full()
-            .ok_or_else(|| anyhow!("no JWT bearer token set"))
-    }
-
-    #[cfg(feature = "grpc")]
     /// Resolve a service gRPC endpoint given its URL.
     ///
     /// If localhost or an IP address is given, it will be returned as is.
@@ -178,210 +94,445 @@ impl ArchitectClient {
     /// If a domain name is given, it will be resolved to an IP address and
     /// port using SRV records.  If a port is specified in `url`, it always
     /// takes precedence over the port found in SRV records.
-    pub async fn resolve_service<U>(&self, url: U) -> Result<Endpoint>
-    where
-        U: TryInto<Url>,
-        U::Error: std::error::Error + Send + Sync + 'static,
-    {
-        let url: Url = url.try_into()?;
-        let mut resolved = String::new();
-        resolved.push_str(url.scheme());
-        resolved.push_str("://");
-        let mut port = url.port();
-        match url.host() {
-            None => bail!("no host name or ip address in endpoint"),
-            Some(Host::Ipv4(addr)) => resolved.push_str(&addr.to_string()),
-            Some(Host::Ipv6(addr)) => resolved.push_str(&addr.to_string()),
-            Some(Host::Domain(domain)) if domain == "localhost" => {
-                resolved.push_str("localhost")
+    pub async fn resolve_endpoint(endpoint: impl AsRef<str>) -> Result<Endpoint> {
+        let uri: Uri = endpoint.as_ref().parse()?;
+        let host = uri
+            .host()
+            .ok_or_else(|| anyhow!("no host name or ip address in endpoint"))?;
+        let use_ssl = uri.scheme_str() == Some("https")
+            || (uri.scheme_str() != Some("http") && host.ends_with(".architect.co"));
+        let scheme = if use_ssl { "https" } else { "http" };
+        let resolved = match uri.port() {
+            Some(port) => {
+                format!("{scheme}://{host}:{port}")
             }
-            Some(Host::Domain(domain)) => {
-                let resolver = TokioAsyncResolver::tokio(
-                    ResolverConfig::default(),
-                    ResolverOpts::default(),
-                );
-                let records = resolver.srv_lookup(domain).await?;
-                let rec = records.iter().next().ok_or_else(|| {
-                    anyhow!("no SRV records found for domain: {domain}")
-                })?;
-                resolved.push_str(&rec.target().to_string());
-                if port.is_none() {
-                    port = Some(rec.port());
-                }
+            None => {
+                // no port provided, lookup SRV records
+                let resolver = TokioResolver::builder_tokio()?.build();
+                let records = resolver.srv_lookup(host).await?;
+                let rec = records
+                    .iter()
+                    .next()
+                    .ok_or_else(|| anyhow!("no SRV records found for host: {host}"))?;
+                let port = rec.port();
+                format!("{scheme}://{host}:{port}")
             }
-        }
-        if let Some(port) = port {
-            resolved.push_str(&format!(":{port}"));
-        }
+        };
         let mut endpoint = Endpoint::try_from(resolved)?
             .connect_timeout(std::time::Duration::from_secs(3));
-        if url.scheme() == "https" {
-            endpoint = endpoint.tls_config(
-                ClientTlsConfig::new()
-                    .domain_name("service.architect.xyz")
-                    .ca_certificate((*self.ca).clone()),
-            )?;
+        if use_ssl {
+            endpoint = endpoint.tls_config(ClientTlsConfig::new())?;
         }
         Ok(endpoint)
     }
 
-    /// Load symbology from the given endpoint into global memory.
-    #[cfg(feature = "grpc")]
-    pub async fn load_symbology_from(&self, endpoint: &Endpoint) -> Result<()> {
-        use crate::symbology::Txn;
-        let channel = endpoint.connect().await?;
-        let mut client = SymbologyClient::new(channel);
-        let snap =
-            client.symbology_snapshot(SymbologySnapshotRequest {}).await?.into_inner();
-        let mut txn = Txn::begin();
-        for route in snap.routes {
-            txn.add_route(route)?;
+    /// Refresh the JWT if it's nearing expiration (within 1 minute) or if force is true
+    pub async fn refresh_jwt(&self, force: bool) -> Result<()> {
+        if !force {
+            if let Some(jwt_and_expiration) = self.jwt.load_full() {
+                let (_jwt, expiration) = &*jwt_and_expiration;
+                let now = Utc::now();
+                if (*expiration - now).num_seconds() > 60 {
+                    return Ok(());
+                }
+            }
         }
-        for venue in snap.venues {
-            txn.add_venue(venue)?;
-        }
-        for product in snap.products {
-            txn.add_product(product)?;
-        }
-        for market in snap.markets {
-            txn.add_market(market)?;
-        }
-        txn.commit()?;
+        info!("refreshing JWT...");
+        let mut client = AuthClient::new(self.core.clone());
+        let req = CreateJwtRequest {
+            api_key: self.api_key.to_string(),
+            api_secret: self.api_secret.to_string(),
+        };
+        let res = client.create_jwt(req).await?;
+        let jwt: ArcStr = format!("Bearer {}", res.into_inner().jwt).into();
+        let expiration = Utc::now() + chrono::Duration::seconds(3600);
+        self.jwt.store(Some(Arc::new((jwt, expiration))));
         Ok(())
     }
 
-    #[cfg(feature = "grpc")]
-    pub async fn load_symbology_from_all(
+    async fn with_jwt<R, T>(&self, request: R) -> Result<Request<T>>
+    where
+        R: IntoRequest<T>,
+    {
+        if let Err(e) = self.refresh_jwt(false).await {
+            error!("failed to refresh JWT: {e:?}");
+        }
+        if let Some(jwt_and_expiration) = self.jwt.load_full() {
+            let (jwt, _expiration) = &*jwt_and_expiration;
+            let mut req = request.into_request();
+            req.metadata_mut()
+                .insert("authorization", MetadataValue::from_str(jwt.as_str())?);
+            Ok(req)
+        } else {
+            Ok(request.into_request())
+        }
+    }
+
+    /// Discover marketdata endpoints from Architect.
+    ///
+    /// The Architect core is responsible for telling you where to find marketdata
+    /// as per its configuration.  You can also manually set marketdata endpoints
+    /// by calling set_marketdata directly.
+    pub async fn discover_marketdata(&self) -> Result<()> {
+        info!("discovering marketdata endpoints...");
+        let mut client = CoreClient::new(self.core.clone());
+        let req = ConfigRequest {};
+        let res = client.config(req).await?;
+        let config = res.into_inner();
+        for (venue, endpoint) in config.marketdata {
+            info!("setting marketdata endpoint for {venue}: {endpoint}");
+            let endpoint = Self::resolve_endpoint(endpoint).await?;
+            let channel = endpoint.connect_lazy();
+            let mut marketdata = self.marketdata.write();
+            marketdata.insert(venue, channel);
+        }
+        Ok(())
+    }
+
+    /// Manually set the marketdata endpoint for a venue.
+    pub async fn set_marketdata(
         &self,
-        endpoints: impl IntoIterator<Item = &Endpoint>,
+        venue: MarketdataVenue,
+        endpoint: impl AsRef<str>,
     ) -> Result<()> {
-        for endpoint in endpoints.into_iter() {
-            self.load_symbology_from(endpoint).await?;
-        }
+        let endpoint = Self::resolve_endpoint(endpoint).await?;
+        info!("setting marketdata endpoint for {venue}: {}", endpoint.uri());
+        let channel = endpoint.connect_lazy();
+        let mut marketdata = self.marketdata.write();
+        marketdata.insert(venue, channel);
         Ok(())
     }
 
-    // CR alee: probably the right abstraction is to have a method `marketdata()`
-    // that returns an inner client which owns the channel, configures the
-    // authorizaiton header, etc.  Then you call subscribe_*/etc methods on that,
-    // which have to be &mut.
-    //
-    // This lets the caller decide how to mux, while still letting the simple
-    // case be easy, just call `marketdata().method()`.
-    #[cfg(feature = "grpc")]
-    pub async fn subscribe_l1_book_snapshots_from(
+    fn marketdata(&self, venue: impl AsRef<str>) -> Result<Channel> {
+        let venue = venue.as_ref();
+        let channel = self
+            .marketdata
+            .read()
+            .get(venue)
+            .ok_or_else(|| anyhow!("no marketdata endpoint set for {venue}"))?
+            .clone();
+        Ok(channel)
+    }
+
+    /// Manually set the hmart (historical marketdata service) endpoint.
+    pub async fn set_hmart(&mut self, endpoint: impl AsRef<str>) -> Result<()> {
+        let endpoint = Self::resolve_endpoint(endpoint).await?;
+        info!("setting hmart endpoint: {}", endpoint.uri());
+        self.hmart = endpoint.connect_lazy();
+        Ok(())
+    }
+
+    /// List all symbols.
+    ///
+    /// If marketdata is specified, query the marketdata endpoint directly;
+    /// this may give different answers than the OMS.
+    pub async fn list_symbols(&self, marketdata: Option<&str>) -> Result<Vec<String>> {
+        let channel = match marketdata {
+            Some(venue) => self.marketdata(venue)?,
+            None => self.core.clone(),
+        };
+        let mut client = SymbologyClient::new(channel);
+        let req = SymbolsRequest {};
+        let req = self.with_jwt(req).await?;
+        let res = client.symbols(req).await?;
+        let symbols = res.into_inner().symbols;
+        Ok(symbols)
+    }
+
+    pub async fn get_market_status(
         &self,
-        endpoint: &Endpoint,
-        // if None, subscribe to all L1 books for all markets available
-        market_ids: Option<Vec<MarketId>>,
-    ) -> Result<Streaming<L1BookSnapshot>> {
-        let channel = endpoint.connect().await?;
+        symbol: impl AsRef<str>,
+        venue: impl AsRef<str>,
+    ) -> Result<MarketStatus> {
+        let symbol = symbol.as_ref();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
         let mut client = MarketdataClient::new(channel);
-        let stream = client
-            .subscribe_l1_book_snapshots(SubscribeL1BookSnapshotsRequest {
-                market_ids,
-                symbols: None,
-            })
-            .await?
-            .into_inner();
-        Ok(stream)
+        let req =
+            MarketStatusRequest { symbol: symbol.to_string(), venue: Some(venue.into()) };
+        let req = self.with_jwt(req).await?;
+        let res = client.market_status(req).await?;
+        Ok(res.into_inner())
     }
 
-    #[cfg(feature = "grpc")]
-    pub async fn l2_book_snapshot_from(
+    pub async fn get_historical_candles(
         &self,
-        endpoint: &Endpoint,
-        market_id: MarketId,
-    ) -> Result<L2BookSnapshot> {
-        let channel = endpoint.connect().await?;
-        let mut client = MarketdataClient::new(channel);
-        let snapshot = client
-            .l2_book_snapshot(L2BookSnapshotRequest {
-                market_id: Some(market_id),
-                symbol: None,
-            })
-            .await?
-            .into_inner();
-        Ok(snapshot)
-    }
-
-    #[cfg(feature = "grpc")]
-    pub async fn subscribe_candles_from(
-        &self,
-        endpoint: &Endpoint,
-        market_id: MarketId,
-        // if None, subscribe for all widths available
-        candle_widths: Option<Vec<CandleWidth>>,
-    ) -> Result<Streaming<Candle>> {
-        let token: MetadataValue<_> = self.jwt_authorization()?.parse()?;
-        let channel = endpoint.connect().await?;
-        let mut client =
-            MarketdataClient::with_interceptor(channel, move |mut req: Request<_>| {
-                req.metadata_mut().insert("authorization", token.clone());
-                Ok(req)
-            });
-        let stream = client
-            .subscribe_candles(SubscribeCandlesRequest {
-                venue: None,
-                market_id: Some(market_id),
-                symbol: None,
-                candle_widths,
-            })
-            .await?
-            .into_inner();
-        Ok(stream)
-    }
-
-    #[cfg(feature = "grpc")]
-    pub async fn subscribe_many_candles_from(
-        &self,
-        endpoint: &Endpoint,
-        // if None, subscribe for all markets available
-        market_ids: Option<Vec<MarketId>>,
+        symbol: impl AsRef<str>,
+        venue: impl AsRef<str>,
         candle_width: CandleWidth,
-    ) -> Result<Streaming<Candle>> {
-        let token: MetadataValue<_> = self.jwt_authorization()?.parse()?;
-        let channel = endpoint.connect().await?;
-        let mut client =
-            MarketdataClient::with_interceptor(channel, move |mut req: Request<_>| {
-                req.metadata_mut().insert("authorization", token.clone());
-                Ok(req)
-            });
-        let stream = client
-            .subscribe_many_candles(SubscribeManyCandlesRequest {
-                venue: None,
-                market_ids,
-                symbols: None,
-                candle_width,
-            })
-            .await?
-            .into_inner();
-        Ok(stream)
+        start_date: DateTime<Utc>,
+        end_date: DateTime<Utc>,
+    ) -> Result<Vec<Candle>> {
+        let symbol = symbol.as_ref();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req = HistoricalCandlesRequest {
+            symbol: symbol.to_string(),
+            venue: Some(venue.into()),
+            candle_width,
+            start_date,
+            end_date,
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.historical_candles(req).await?;
+        Ok(res.into_inner().candles)
     }
 
-    #[cfg(feature = "grpc")]
-    pub async fn subscribe_trades_from(
+    pub async fn get_l1_book_snapshot(
         &self,
-        endpoint: &Endpoint,
-        // if None, subscribe for all markets available
-        market_id: Option<MarketId>,
+        symbol: impl AsRef<str>,
+        venue: impl AsRef<str>,
+    ) -> Result<L1BookSnapshot> {
+        let symbol = symbol.as_ref();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req = L1BookSnapshotRequest {
+            symbol: symbol.to_string(),
+            venue: Some(venue.into()),
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.l1_book_snapshot(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn get_l1_book_snapshots(
+        &self,
+        symbols: impl IntoIterator<Item = impl AsRef<str>>,
+        venue: impl AsRef<str>,
+    ) -> Result<Vec<L1BookSnapshot>> {
+        let symbols =
+            symbols.into_iter().map(|s| s.as_ref().to_string()).collect::<Vec<_>>();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req =
+            L1BookSnapshotsRequest { symbols: Some(symbols), venue: Some(venue.into()) };
+        let req = self.with_jwt(req).await?;
+        let res = client.l1_book_snapshots(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn get_l2_book_snapshot(
+        &self,
+        symbol: impl AsRef<str>,
+        venue: impl AsRef<str>,
+    ) -> Result<L2BookSnapshot> {
+        let symbol = symbol.as_ref();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req = L2BookSnapshotRequest {
+            symbol: symbol.to_string(),
+            venue: Some(venue.into()),
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.l2_book_snapshot(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn get_ticker(
+        &self,
+        symbol: impl AsRef<str>,
+        venue: impl AsRef<str>,
+    ) -> Result<Ticker> {
+        let symbol = symbol.as_ref();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req = TickerRequest { symbol: symbol.to_string(), venue: Some(venue.into()) };
+        let req = self.with_jwt(req).await?;
+        let res = client.ticker(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn stream_l1_book_snapshots(
+        &self,
+        symbols: impl IntoIterator<Item = impl AsRef<str>>,
+        venue: impl AsRef<str>,
+    ) -> Result<Streaming<L1BookSnapshot>> {
+        let symbols =
+            symbols.into_iter().map(|s| s.as_ref().to_string()).collect::<Vec<_>>();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req = SubscribeL1BookSnapshotsRequest {
+            symbols: Some(symbols),
+            venue: Some(venue.into()),
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.subscribe_l1_book_snapshots(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn stream_l2_book_updates(
+        &self,
+        symbol: impl AsRef<str>,
+        venue: impl AsRef<str>,
+    ) -> Result<Streaming<L2BookUpdate>> {
+        let symbol = symbol.as_ref();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req = SubscribeL2BookUpdatesRequest {
+            symbol: symbol.to_string(),
+            venue: Some(venue.into()),
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.subscribe_l2_book_updates(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn stream_trades(
+        &self,
+        symbol: Option<impl AsRef<str>>,
+        venue: impl AsRef<str>,
     ) -> Result<Streaming<Trade>> {
-        let token: MetadataValue<_> = self.jwt_authorization()?.parse()?;
-        let channel = endpoint.connect().await?;
-        let mut client =
-            MarketdataClient::with_interceptor(channel, move |mut req: Request<_>| {
-                req.metadata_mut().insert("authorization", token.clone());
-                Ok(req)
-            });
-        let stream = client
-            .subscribe_trades(SubscribeTradesRequest {
-                venue: None,
-                market_id,
-                symbol: None,
-            })
-            .await?
-            .into_inner();
-        Ok(stream)
+        let symbol = symbol.as_ref();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req = SubscribeTradesRequest {
+            symbol: symbol.map(|s| s.as_ref().to_string()),
+            venue: Some(venue.into()),
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.subscribe_trades(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn stream_candles(
+        &self,
+        symbol: impl AsRef<str>,
+        venue: impl AsRef<str>,
+        candle_widths: Option<impl IntoIterator<Item = &CandleWidth>>,
+    ) -> Result<Streaming<Candle>> {
+        let symbol = symbol.as_ref();
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req = SubscribeCandlesRequest {
+            symbol: symbol.to_string(),
+            venue: Some(venue.into()),
+            candle_widths: candle_widths.map(|c| c.into_iter().copied().collect()),
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.subscribe_candles(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn list_accounts(&self) -> Result<Vec<AccountWithPermissions>> {
+        let mut client = AccountsClient::new(self.core.clone());
+        let req = AccountsRequest { paper: false, trader: None };
+        let req = self.with_jwt(req).await?;
+        let res = client.accounts(req).await?;
+        Ok(res.into_inner().accounts)
+    }
+
+    pub async fn get_account_summary(
+        &self,
+        account: AccountIdOrName,
+    ) -> Result<AccountSummary> {
+        let mut client = FolioClient::new(self.core.clone());
+        let req = AccountSummaryRequest { account };
+        let req = self.with_jwt(req).await?;
+        let res = client.account_summary(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn get_account_summaries(
+        &self,
+        account: Option<impl IntoIterator<Item = AccountIdOrName>>,
+        trader: Option<TraderIdOrEmail>,
+    ) -> Result<Vec<AccountSummary>> {
+        let mut client = FolioClient::new(self.core.clone());
+        let req = AccountSummariesRequest {
+            accounts: account.map(|a| a.into_iter().collect()),
+            trader,
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.account_summaries(req).await?;
+        Ok(res.into_inner().account_summaries)
+    }
+
+    pub async fn get_account_history(
+        &self,
+        account: AccountIdOrName,
+        from_inclusive: Option<DateTime<Utc>>,
+        to_exclusive: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AccountSummary>> {
+        let mut client = FolioClient::new(self.core.clone());
+        let req = AccountHistoryRequest { account, from_inclusive, to_exclusive };
+        let req = self.with_jwt(req).await?;
+        let res = client.account_history(req).await?;
+        Ok(res.into_inner().history)
+    }
+
+    pub async fn get_open_orders(
+        &self,
+        order_ids: Option<impl IntoIterator<Item = &OrderId>>,
+        venue: Option<impl AsRef<str>>,
+        account: Option<AccountIdOrName>,
+        trader: Option<TraderIdOrEmail>,
+        symbol: Option<impl AsRef<str>>,
+        parent_order_id: Option<OrderId>,
+    ) -> Result<Vec<Order>> {
+        let mut client = OmsClient::new(self.core.clone());
+        let req = OpenOrdersRequest {
+            order_ids: order_ids.map(|o| o.into_iter().copied().collect()),
+            venue: venue.map(|v| v.as_ref().into()),
+            account,
+            trader,
+            symbol: symbol.map(|s| s.as_ref().to_string()),
+            parent_order_id,
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.open_orders(req).await?;
+        Ok(res.into_inner().open_orders)
+    }
+
+    pub async fn get_all_open_orders(&self) -> Result<Vec<Order>> {
+        self.get_open_orders(
+            None::<&[OrderId]>,
+            None::<&str>,
+            None,
+            None,
+            None::<&str>,
+            None,
+        )
+        .await
+    }
+
+    pub async fn get_historical_orders(
+        &self,
+        query: HistoricalOrdersRequest,
+    ) -> Result<Vec<Order>> {
+        let mut client = FolioClient::new(self.core.clone());
+        let req = self.with_jwt(query).await?;
+        let res = client.historical_orders(req).await?;
+        Ok(res.into_inner().orders)
+    }
+
+    pub async fn get_fills(&self, query: HistoricalFillsRequest) -> Result<Vec<Fill>> {
+        let mut client = FolioClient::new(self.core.clone());
+        let req = self.with_jwt(query).await?;
+        let res = client.historical_fills(req).await?;
+        Ok(res.into_inner().fills)
+    }
+
+    pub async fn place_order(&self, place_order: PlaceOrderRequest) -> Result<Order> {
+        let mut client = OmsClient::new(self.core.clone());
+        let req = self.with_jwt(place_order).await?;
+        let res = client.place_order(req).await?;
+        Ok(res.into_inner())
+    }
+
+    pub async fn cancel_order(&self, cancel_order: CancelOrderRequest) -> Result<Cancel> {
+        let mut client = OmsClient::new(self.core.clone());
+        let req = self.with_jwt(cancel_order).await?;
+        let res = client.cancel_order(req).await?;
+        Ok(res.into_inner())
     }
 }
 
@@ -389,9 +540,13 @@ impl ArchitectClient {
 mod tests {
     use super::*;
 
-    /// Test that the default client can be created and doesn't panic
-    #[test]
-    fn test_new() {
-        let _client = ArchitectClient::default();
+    /// Test deterministic endpoint resolution
+    #[tokio::test]
+    async fn test_resolve_endpoint() -> Result<()> {
+        let e = Architect::resolve_endpoint("127.0.0.1:8081").await?;
+        assert_eq!(e.uri().to_string(), "http://127.0.0.1:8081/");
+        let e = Architect::resolve_endpoint("https://localhost:8081").await?;
+        assert_eq!(e.uri().to_string(), "https://localhost:8081/");
+        Ok(())
     }
 }

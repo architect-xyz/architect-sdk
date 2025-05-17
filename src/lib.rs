@@ -1,9 +1,8 @@
 use anyhow::{bail, Result};
 use std::path::{Path, PathBuf};
 
-// pub mod client;
-#[cfg(feature = "graphql")]
-pub mod graphql;
+#[cfg(feature = "grpc")]
+pub mod client;
 #[cfg(feature = "grpc")]
 pub mod grpc;
 pub mod marketdata;
@@ -12,9 +11,8 @@ pub mod order_id_allocator;
 pub mod symbology;
 pub mod synced;
 
-// #[cfg(feature = "grpc")]
-// pub use client::ArchitectClient;
-
+#[cfg(feature = "grpc")]
+pub use client::Architect;
 pub use marketdata::MarketdataSource;
 
 /// Canonical config file location resolution.
