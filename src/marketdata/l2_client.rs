@@ -25,6 +25,7 @@ use tonic::{transport::Channel, Streaming};
 /// If you need multiple readers/consumers of this client, use `L2Client::handle()`
 /// to create a cheaply cloneable handle to pass around.
 pub struct L2Client {
+    venue: Arc<Option<MarketdataVenue>>,
     symbol: ArcStr,
     updates: Streaming<L2BookUpdate>,
     state: Arc<Mutex<L2ClientState>>,
@@ -41,7 +42,7 @@ impl L2Client {
         let mut client = MarketdataClient::new(channel);
         let mut updates = client
             .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest {
-                venue,
+                venue: venue.clone(),
                 symbol: symbol.clone(),
             })
             .await?
@@ -63,6 +64,7 @@ impl L2Client {
             }
         };
         Ok(Self {
+            venue: Arc::new(venue),
             symbol: symbol.into(),
             updates,
             state: Arc::new(Mutex::new(state)),
@@ -83,7 +85,7 @@ impl L2Client {
         let mut client = MarketdataClient::connect(endpoint).await?;
         let mut updates = client
             .subscribe_l2_book_updates(SubscribeL2BookUpdatesRequest {
-                venue,
+                venue: venue.clone(),
                 symbol: symbol.clone(),
             })
             .await?
@@ -105,6 +107,7 @@ impl L2Client {
             }
         };
         Ok(Self {
+            venue: Arc::new(venue),
             symbol: symbol.into(),
             updates,
             state: Arc::new(Mutex::new(state)),
@@ -132,6 +135,7 @@ impl L2Client {
 
     pub fn handle(&self) -> L2ClientHandle {
         L2ClientHandle {
+            venue: self.venue.clone(),
             symbol: self.symbol.clone(),
             state: self.state.clone(),
             ready: self.ready.handle(),
@@ -165,8 +169,8 @@ impl L2Client {
 /// In either case, accessor functions will return `None`.
 #[derive(Clone)]
 pub struct L2ClientHandle {
-    #[allow(unused)]
-    pub(super) symbol: ArcStr,
+    pub venue: Arc<Option<MarketdataVenue>>,
+    pub symbol: ArcStr,
     pub(super) state: Arc<Mutex<L2ClientState>>,
     pub(super) ready: SyncedHandle<bool>,
     pub(super) alive: Weak<()>,

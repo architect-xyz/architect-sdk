@@ -13,8 +13,8 @@ use tonic::{transport::Channel, Status, Streaming};
 pub struct ManagedL1Streams {
     marketdata: Arc<MarketdataSource<Channel>>,
     updates: StreamMap<SubscriptionKey, Streaming<L1BookSnapshot>>,
-    tx_subs: mpsc::Sender<SubscribeOrUnsubscribe<SubscriptionKey>>,
-    rx_subs: mpsc::Receiver<SubscribeOrUnsubscribe<SubscriptionKey>>,
+    tx_subs: mpsc::UnboundedSender<SubscribeOrUnsubscribe<SubscriptionKey>>,
+    rx_subs: mpsc::UnboundedReceiver<SubscribeOrUnsubscribe<SubscriptionKey>>,
 }
 
 type SubscriptionKey = (MarketdataVenue, String);
@@ -26,7 +26,7 @@ enum SubscribeOrUnsubscribe<T> {
 
 impl ManagedL1Streams {
     pub fn new(marketdata: Arc<MarketdataSource<Channel>>) -> Self {
-        let (tx_subs, rx_subs) = mpsc::channel(1000);
+        let (tx_subs, rx_subs) = mpsc::unbounded_channel();
         Self { marketdata, updates: StreamMap::new(), tx_subs, rx_subs }
     }
 
@@ -56,10 +56,10 @@ impl ManagedL1Streams {
         Ok(None)
     }
 
-    // updates would hotloop with Ready(None) if empty
     async fn next_update(
         updates: &mut StreamMap<SubscriptionKey, Streaming<L1BookSnapshot>>,
     ) -> Option<(SubscriptionKey, Result<L1BookSnapshot, Status>)> {
+        // updates would otherwise hotloop with Ready(None) if empty
         if updates.is_empty() {
             std::future::pending().await
         } else {
@@ -110,7 +110,7 @@ impl ManagedL1Streams {
 
 #[derive(Clone)]
 pub struct ManagedL1StreamsHandle {
-    tx_subs: mpsc::Sender<SubscribeOrUnsubscribe<SubscriptionKey>>,
+    tx_subs: mpsc::UnboundedSender<SubscribeOrUnsubscribe<SubscriptionKey>>,
 }
 
 impl ManagedL1StreamsHandle {
@@ -120,12 +120,10 @@ impl ManagedL1StreamsHandle {
         symbol: impl AsRef<str>,
     ) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.tx_subs
-            .send(SubscribeOrUnsubscribe::Subscribe(
-                (venue.clone(), symbol.as_ref().to_string()),
-                Some(tx),
-            ))
-            .await?;
+        self.tx_subs.send(SubscribeOrUnsubscribe::Subscribe(
+            (venue.clone(), symbol.as_ref().to_string()),
+            Some(tx),
+        ))?;
         rx.await??;
         Ok(())
     }
@@ -135,7 +133,7 @@ impl ManagedL1StreamsHandle {
         venue: &MarketdataVenue,
         symbol: impl AsRef<str>,
     ) -> Result<()> {
-        self.tx_subs.try_send(SubscribeOrUnsubscribe::Subscribe(
+        self.tx_subs.send(SubscribeOrUnsubscribe::Subscribe(
             (venue.clone(), symbol.as_ref().to_string()),
             None,
         ))?;
@@ -147,7 +145,7 @@ impl ManagedL1StreamsHandle {
         venue: &MarketdataVenue,
         symbol: impl AsRef<str>,
     ) -> Result<()> {
-        self.tx_subs.try_send(SubscribeOrUnsubscribe::Unsubscribe((
+        self.tx_subs.send(SubscribeOrUnsubscribe::Unsubscribe((
             venue.clone(),
             symbol.as_ref().to_string(),
         )))?;
