@@ -351,6 +351,7 @@ impl Architect {
         &self,
         symbols: impl IntoIterator<Item = impl AsRef<str>>,
         venue: impl AsRef<str>,
+        send_initial_snapshots: bool,
     ) -> Result<Streaming<L1BookSnapshot>> {
         let symbols =
             symbols.into_iter().map(|s| s.as_ref().to_string()).collect::<Vec<_>>();
@@ -360,6 +361,7 @@ impl Architect {
         let req = SubscribeL1BookSnapshotsRequest {
             symbols: Some(symbols),
             venue: Some(venue.into()),
+            send_initial_snapshots,
         };
         let req = self.with_jwt(req).await?;
         let res = client.subscribe_l1_book_snapshots(req).await?;

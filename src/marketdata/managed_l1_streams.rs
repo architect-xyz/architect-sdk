@@ -11,6 +11,7 @@ use tokio_stream::StreamMap;
 use tonic::{transport::Channel, Status, Streaming};
 
 pub struct ManagedL1Streams {
+    send_initial_snapshots: bool,
     marketdata: Arc<MarketdataSource<Channel>>,
     updates: StreamMap<SubscriptionKey, Streaming<L1BookSnapshot>>,
     tx_subs: mpsc::UnboundedSender<SubscribeOrUnsubscribe<SubscriptionKey>>,
@@ -25,9 +26,23 @@ enum SubscribeOrUnsubscribe<T> {
 }
 
 impl ManagedL1Streams {
-    pub fn new(marketdata: Arc<MarketdataSource<Channel>>) -> Self {
+    /// If `send_initial_snapshots` is true, load the ticker on symbol subscription
+    /// and send an initial snapshot to subscribers.  Otherwise, no marketdata events
+    /// for a symbol will be seen until the first bbo tick.
+    ///
+    /// For symbols that don't tick often, that may be quite some time.
+    pub fn new(
+        marketdata: Arc<MarketdataSource<Channel>>,
+        send_initial_snapshots: bool,
+    ) -> Self {
         let (tx_subs, rx_subs) = mpsc::unbounded_channel();
-        Self { marketdata, updates: StreamMap::new(), tx_subs, rx_subs }
+        Self {
+            send_initial_snapshots,
+            marketdata,
+            updates: StreamMap::new(),
+            tx_subs,
+            rx_subs,
+        }
     }
 
     pub fn handle(&self) -> ManagedL1StreamsHandle {
@@ -81,6 +96,7 @@ impl ManagedL1Streams {
                         .subscribe_l1_book_snapshots(SubscribeL1BookSnapshotsRequest {
                             venue: None,
                             symbols: Some(vec![symbol.clone()]),
+                            send_initial_snapshots: self.send_initial_snapshots,
                         })
                         .await
                     {
