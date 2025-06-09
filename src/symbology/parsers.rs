@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 
 #[derive(Debug)]
-pub struct UsEquityOptionSymbology {
+pub struct UsEquityOptionsParts {
     // OSI 21-byte format:
     // SSSSSSYYMMDDOPPPPPppp
     // 0-5: symbol, right space padded
@@ -22,7 +22,7 @@ pub struct UsEquityOptionSymbology {
     pub put_or_call: PutOrCall,
 }
 
-impl UsEquityOptionSymbology {
+impl UsEquityOptionsParts {
     // Expceted base product format: AAPL US 20260918 220.50 C Option
     pub fn parse(tradable_product: &TradableProduct) -> Result<Option<Self>> {
         let base = tradable_product.base().to_string();
@@ -78,7 +78,7 @@ mod tests {
     fn test_parse_option() -> Result<()> {
         let tradable_product =
             TradableProduct::from_str("AAPL US 20260918 220.50 C Option/USD")?;
-        let symbology = UsEquityOptionSymbology::parse(&tradable_product)?.unwrap();
+        let symbology = UsEquityOptionsParts::parse(&tradable_product)?.unwrap();
         assert_eq!(symbology.osi_symbol, "AAPL  260918C00220500");
         assert_eq!(symbology.underlying_symbol, "AAPL");
         assert_eq!(symbology.expiration, NaiveDate::from_ymd_opt(2026, 9, 18).unwrap());
