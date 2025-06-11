@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use api::{
-    grpc::json_service::symbology_client::SymbologyClient as SymbologyGrpcClient,
+    grpc::service::symbology_client::SymbologyClient as SymbologyGrpcClient,
     symbology::protocol::{SubscribeSymbology, SymbologyUpdate},
     utils::sequence::SequenceIdAndNumber,
 };

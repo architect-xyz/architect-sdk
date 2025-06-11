@@ -1,7 +1,7 @@
 use crate::MarketdataSource;
 use anyhow::{anyhow, Result};
 use api::{
-    grpc::json_service::marketdata_client::MarketdataClient, marketdata::*, symbology::*,
+    grpc::service::marketdata_client::MarketdataClient, marketdata::*, symbology::*,
 };
 use futures::{select_biased, FutureExt, StreamExt};
 use log::error;

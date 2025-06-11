@@ -2,7 +2,7 @@ use super::store::SymbologyStore;
 use crate::grpc::GrpcClientConfig;
 use anyhow::Result;
 use api::{
-    grpc::json_service::symbology_client::SymbologyClient as SymbologyGrpcClient,
+    grpc::service::symbology_client::SymbologyClient as SymbologyGrpcClient,
     symbology::{protocol::*, *},
 };
 use std::collections::BTreeMap;

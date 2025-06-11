@@ -10,7 +10,7 @@ use api::{
     auth::*,
     core::*,
     folio::*,
-    grpc::json_service::{
+    grpc::service::{
         accounts_client::*, auth_client::*, core_client::*, folio_client::*,
         marketdata_client::*, oms_client::*, symbology_client::*,
     },

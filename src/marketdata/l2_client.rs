@@ -2,7 +2,7 @@ use super::LevelBook;
 use crate::synced::{Synced, SyncedHandle};
 use anyhow::{anyhow, bail, Result};
 use api::{
-    grpc::json_service::marketdata_client::MarketdataClient, marketdata::*,
+    grpc::service::marketdata_client::MarketdataClient, marketdata::*,
     symbology::MarketdataVenue, utils::sequence::SequenceIdAndNumber,
 };
 use arcstr::ArcStr;
