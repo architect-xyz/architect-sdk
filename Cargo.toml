@@ -55,6 +55,7 @@ rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true, optional = true }
 time = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tonic = { workspace = true, optional = true }

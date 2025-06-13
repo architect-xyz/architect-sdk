@@ -22,7 +22,7 @@ use api::{
 };
 use arc_swap::ArcSwapOption;
 use arcstr::ArcStr;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveTime, Utc};
 use hickory_resolver::TokioResolver;
 use log::{error, info};
 use parking_lot::RwLock;
@@ -463,9 +463,19 @@ impl Architect {
         account: AccountIdOrName,
         from_inclusive: Option<DateTime<Utc>>,
         to_exclusive: Option<DateTime<Utc>>,
+        granularity: Option<AccountHistoryGranularity>,
+        limit: Option<i32>,
+        time_of_day: Option<NaiveTime>,
     ) -> Result<Vec<AccountSummary>> {
         let mut client = FolioClient::new(self.core.clone());
-        let req = AccountHistoryRequest { account, from_inclusive, to_exclusive };
+        let req = AccountHistoryRequest {
+            account,
+            from_inclusive,
+            to_exclusive,
+            granularity,
+            limit,
+            time_of_day,
+        };
         let req = self.with_jwt(req).await?;
         let res = client.account_history(req).await?;
         Ok(res.into_inner().history)

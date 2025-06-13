@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 #[cfg(feature = "grpc")]
 pub mod client;
+pub mod discrete_clock;
 #[cfg(feature = "grpc")]
 pub mod grpc;
 pub mod marketdata;
