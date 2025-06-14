@@ -157,14 +157,15 @@ impl Architect {
         if let Err(e) = self.refresh_jwt(false).await {
             error!("failed to refresh JWT: {e:?}");
         }
-        if let Some(jwt_and_expiration) = self.jwt.load_full() {
-            let (jwt, _expiration) = &*jwt_and_expiration;
-            let mut req = request.into_request();
-            req.metadata_mut()
-                .insert("authorization", MetadataValue::from_str(jwt.as_str())?);
-            Ok(req)
-        } else {
-            Ok(request.into_request())
+        match self.jwt.load_full() {
+            Some(jwt_and_expiration) => {
+                let (jwt, _expiration) = &*jwt_and_expiration;
+                let mut req = request.into_request();
+                req.metadata_mut()
+                    .insert("authorization", MetadataValue::from_str(jwt.as_str())?);
+                Ok(req)
+            }
+            _ => Ok(request.into_request()),
         }
     }
 
