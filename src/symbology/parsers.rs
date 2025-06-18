@@ -146,12 +146,7 @@ impl UsEquityOptionsParts {
     ) -> Result<String> {
         let strike_price_string = strike_price.to_string();
         let (strike_price_dollar_part, strike_price_decimal_part) =
-            strike_price_string.split_once(".").ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Expected strike price to be a decimal, got {}",
-                    strike_price
-                )
-            })?;
+            strike_price_string.split_once(".").unwrap_or((&strike_price_string, "000"));
         let put_or_call_char = match put_or_call {
             PutOrCall::Put => "P",
             PutOrCall::Call => "C",
