@@ -54,13 +54,16 @@ parking_lot = { workspace = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true, optional = true }
-time = { workspace = true }
 thiserror = { workspace = true }
+time = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tonic = { workspace = true, optional = true }
 url = { workspace = true }
 uuid = { workspace = true }
+
+[build-dependencies]
+tonic-build = { package = "architect-tonic-build", version = "0.13.1", path = "../vendor/tonic-build", optional = true }
 
 # [dev-dependencies]
 # env_logger = { workspace = true }
@@ -69,4 +72,5 @@ uuid = { workspace = true }
 [package.metadata.cargo-machete]
 ignored = [
     "once_cell", # api::pool
+    "tonic-build", # build.rs
 ]
