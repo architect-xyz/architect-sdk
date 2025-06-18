@@ -18,6 +18,7 @@ use api::{
     oms::*,
     orderflow::*,
     symbology::{protocol::*, *},
+    utils::pagination::OffsetAndLimit,
     *,
 };
 use arc_swap::ArcSwapOption;
@@ -121,7 +122,8 @@ impl Architect {
         let mut endpoint = Endpoint::try_from(resolved)?
             .connect_timeout(std::time::Duration::from_secs(3));
         if use_ssl {
-            endpoint = endpoint.tls_config(ClientTlsConfig::new())?;
+            endpoint =
+                endpoint.tls_config(ClientTlsConfig::new().with_enabled_roots())?;
         }
         Ok(endpoint)
     }
@@ -348,6 +350,28 @@ impl Architect {
         Ok(res.into_inner())
     }
 
+    pub async fn get_tickers(
+        &self,
+        venue: impl AsRef<str>,
+        options: GetTickersOptions,
+        sort_tickers_by: Option<SortTickersBy>,
+        offset: Option<i32>,
+        limit: Option<i32>,
+    ) -> Result<Vec<Ticker>> {
+        let venue = venue.as_ref();
+        let channel = self.marketdata(venue)?;
+        let mut client = MarketdataClient::new(channel);
+        let req = TickersRequest {
+            symbols: options.symbols,
+            venue: Some(venue.into()),
+            pagination: OffsetAndLimit { offset, limit, sort_by: sort_tickers_by },
+            include_options: Some(options.include_options),
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.tickers(req).await?;
+        Ok(res.into_inner().tickers)
+    }
+
     pub async fn stream_l1_book_snapshots(
         &self,
         symbols: impl IntoIterator<Item = impl AsRef<str>>,
@@ -547,6 +571,12 @@ impl Architect {
         let res = client.cancel_order(req).await?;
         Ok(res.into_inner())
     }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct GetTickersOptions {
+    pub symbols: Option<Vec<String>>,
+    pub include_options: bool,
 }
 
 #[cfg(test)]
