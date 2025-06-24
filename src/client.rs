@@ -25,7 +25,7 @@ use arc_swap::ArcSwapOption;
 use arcstr::ArcStr;
 use chrono::{DateTime, NaiveTime, Utc};
 use hickory_resolver::TokioResolver;
-use log::{error, info};
+use log::{debug, error, info};
 use parking_lot::RwLock;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tonic::{
@@ -115,10 +115,12 @@ impl Architect {
                     .iter()
                     .next()
                     .ok_or_else(|| anyhow!("no SRV records found for host: {host}"))?;
+                let target = rec.target();
                 let port = rec.port();
-                format!("{scheme}://{host}:{port}")
+                format!("{scheme}://{target}:{port}")
             }
         };
+        debug!("resolved endpoint: {} -> {}", endpoint.as_ref(), resolved);
         let mut endpoint = Endpoint::try_from(resolved)?
             .connect_timeout(std::time::Duration::from_secs(3));
         if use_ssl {
@@ -268,7 +270,7 @@ impl Architect {
     ) -> Result<Vec<Candle>> {
         let symbol = symbol.as_ref();
         let venue = venue.as_ref();
-        let channel = self.marketdata(venue)?;
+        let channel = self.hmart.clone();
         let mut client = MarketdataClient::new(channel);
         let req = HistoricalCandlesRequest {
             symbol: symbol.to_string(),
