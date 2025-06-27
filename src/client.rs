@@ -451,9 +451,13 @@ impl Architect {
         Ok(res.into_inner())
     }
 
-    pub async fn list_accounts(&self) -> Result<Vec<AccountWithPermissions>> {
+    pub async fn list_accounts(
+        &self,
+        paper: bool,
+        trader: Option<TraderIdOrEmail>,
+    ) -> Result<Vec<AccountWithPermissions>> {
         let mut client = AccountsClient::new(self.core.clone());
-        let req = AccountsRequest { paper: false, trader: None };
+        let req = AccountsRequest { paper, trader };
         let req = self.with_jwt(req).await?;
         let res = client.accounts(req).await?;
         Ok(res.into_inner().accounts)
