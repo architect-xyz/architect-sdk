@@ -4,7 +4,7 @@
 //! service discovery and authentication in the background, and also implements
 //! some useful utilities and patterns for marketdata and orderflow.
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use arc_swap::ArcSwapOption;
 use architect_api::{
     accounts::*,
@@ -47,6 +47,7 @@ pub use architect_api::{
 #[allow(dead_code)]
 pub struct Architect {
     core: Channel,
+    symbology: Arc<RwLock<Option<Channel>>>,
     marketdata: Arc<RwLock<HashMap<MarketdataVenue, Channel>>>,
     hmart: Channel,
     ca: Arc<Certificate>,
@@ -76,6 +77,7 @@ impl Architect {
         let hmart = hmart_endpoint.connect_lazy();
         let t = Self {
             core,
+            symbology: Arc::new(RwLock::new(None)),
             marketdata,
             hmart,
             ca: Arc::new(Certificate::from_pem(ARCHITECT_CA)),
@@ -84,7 +86,7 @@ impl Architect {
             jwt: Arc::new(ArcSwapOption::empty()),
         };
         t.refresh_jwt(false).await?;
-        t.discover_marketdata().await?;
+        t.discover_services().await?;
         Ok(t)
     }
 
@@ -173,17 +175,25 @@ impl Architect {
         }
     }
 
-    /// Discover marketdata endpoints from Architect.
+    /// Discover service endpoints from Architect.
     ///
-    /// The Architect core is responsible for telling you where to find marketdata
-    /// as per its configuration.  You can also manually set marketdata endpoints
-    /// by calling set_marketdata directly.
-    pub async fn discover_marketdata(&self) -> Result<()> {
-        info!("discovering marketdata endpoints...");
+    /// The Architect core is responsible for telling you where to find services
+    /// like symbology and marketdata as per its configuration.  You can also
+    /// manually set endpoints by calling set_symbology and set_marketdata
+    /// directly.
+    pub async fn discover_services(&self) -> Result<()> {
+        info!("discovering service endpoints...");
         let mut client = CoreClient::new(self.core.clone());
         let req = ConfigRequest {};
         let res = client.config(req).await?;
         let config = res.into_inner();
+        if let Some(symbology) = config.symbology {
+            info!("setting symbology endpoint: {}", symbology);
+            let endpoint = Self::resolve_endpoint(symbology).await?;
+            let channel = endpoint.connect_lazy();
+            let mut symbology = self.symbology.write();
+            *symbology = Some(channel);
+        }
         for (venue, endpoint) in config.marketdata {
             info!("setting marketdata endpoint for {venue}: {endpoint}");
             let endpoint = Self::resolve_endpoint(endpoint).await?;
@@ -191,6 +201,25 @@ impl Architect {
             let mut marketdata = self.marketdata.write();
             marketdata.insert(venue, channel);
         }
+        Ok(())
+    }
+
+    fn symbology(&self) -> Result<Channel> {
+        let symbology = self.symbology.read();
+        if let Some(channel) = &*symbology {
+            Ok(channel.clone())
+        } else {
+            bail!("no symbology endpoint");
+        }
+    }
+
+    /// Manually set the symbology endpoint.
+    pub async fn set_symbology(&self, endpoint: impl AsRef<str>) -> Result<()> {
+        let endpoint = Self::resolve_endpoint(endpoint).await?;
+        info!("setting symbology endpoint: {}", endpoint.uri());
+        let channel = endpoint.connect_lazy();
+        let mut symbology = self.symbology.write();
+        *symbology = Some(channel);
         Ok(())
     }
 
@@ -242,6 +271,22 @@ impl Architect {
         let res = client.symbols(req).await?;
         let symbols = res.into_inner().symbols;
         Ok(symbols)
+    }
+
+    pub async fn get_futures_series(
+        &self,
+        series_symbol: impl AsRef<str>,
+        include_expired: bool,
+    ) -> Result<Vec<Product>> {
+        let channel = self.symbology()?;
+        let mut client = SymbologyClient::new(channel);
+        let req = FuturesSeriesRequest {
+            series_symbol: series_symbol.as_ref().to_string(),
+            include_expired,
+        };
+        let req = self.with_jwt(req).await?;
+        let res = client.futures_series(req).await?;
+        Ok(res.into_inner().futures)
     }
 
     pub async fn get_market_status(
