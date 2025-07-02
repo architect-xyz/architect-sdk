@@ -148,6 +148,7 @@ impl Architect {
         let req = CreateJwtRequest {
             api_key: self.api_key.to_string(),
             api_secret: self.api_secret.to_string(),
+            grants: None,
         };
         let res = client.create_jwt(req).await?;
         let jwt: ArcStr = format!("Bearer {}", res.into_inner().jwt).into();
