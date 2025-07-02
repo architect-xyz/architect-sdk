@@ -1,7 +1,7 @@
 use super::LevelBook;
 use crate::synced::{Synced, SyncedHandle};
 use anyhow::{anyhow, bail, Result};
-use api::{
+use architect_api::{
     grpc::service::marketdata_client::MarketdataClient, marketdata::*,
     symbology::MarketdataVenue, utils::sequence::SequenceIdAndNumber,
 };
@@ -161,7 +161,7 @@ impl L2Client {
     }
 }
 
-/// Handle to an `L2Client` that can be cheaply cloned.  
+/// Handle to an `L2Client` that can be cheaply cloned.
 ///
 /// If still waiting on the first snapshot, `is_ready` will return false.
 /// If the driving `L2Client` is dropped, `is_alive` will return false.

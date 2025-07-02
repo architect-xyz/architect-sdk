@@ -41,12 +41,12 @@ pub fn locate_config(from_arg: Option<impl AsRef<Path>>) -> Result<PathBuf> {
 }
 
 #[cfg(feature = "yaml")]
-pub fn load_config(from_arg: Option<impl AsRef<Path>>) -> Result<api::Config> {
+pub fn load_config(from_arg: Option<impl AsRef<Path>>) -> Result<architect_api::Config> {
     use anyhow::Context;
     let path = locate_config(from_arg)?;
     let config_s = std::fs::read_to_string(&path)
         .with_context(|| format!("while reading file: {}", path.display()))?;
-    let config: api::Config = serde_yaml::from_str(&config_s)
+    let config: architect_api::Config = serde_yaml::from_str(&config_s)
         .with_context(|| format!("while parsing file: {}", path.display()))?;
     Ok(config)
 }

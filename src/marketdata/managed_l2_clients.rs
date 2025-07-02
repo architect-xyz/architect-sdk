@@ -1,7 +1,7 @@
 use super::l2_client::{L2ClientHandle, L2ClientState};
 use crate::{symbology::MarketRef, synced::SyncHandle};
 use anyhow::{anyhow, bail, Result};
-use api::{
+use architect_api::{
     external::marketdata::*, grpc::json_service::marketdata_client::MarketdataClient,
     symbology::MarketId,
 };

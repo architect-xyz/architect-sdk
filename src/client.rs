@@ -5,7 +5,8 @@
 //! some useful utilities and patterns for marketdata and orderflow.
 
 use anyhow::{anyhow, Result};
-use api::{
+use arc_swap::ArcSwapOption;
+use architect_api::{
     accounts::*,
     auth::*,
     core::*,
@@ -21,7 +22,6 @@ use api::{
     utils::pagination::OffsetAndLimit,
     *,
 };
-use arc_swap::ArcSwapOption;
 use arcstr::ArcStr;
 use chrono::{DateTime, NaiveTime, Utc};
 use hickory_resolver::TokioResolver;
@@ -38,7 +38,7 @@ use tonic::{
 const ARCHITECT_CA: &[u8] = include_bytes!("ca.crt");
 
 // convenience re-exports
-pub use api::{
+pub use architect_api::{
     folio::{HistoricalFillsRequest, HistoricalOrdersRequest},
     oms::{CancelOrderRequest, PlaceOrderRequest},
 };

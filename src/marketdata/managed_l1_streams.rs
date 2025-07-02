@@ -1,6 +1,6 @@
 use crate::MarketdataSource;
 use anyhow::{anyhow, Result};
-use api::{
+use architect_api::{
     grpc::service::marketdata_client::MarketdataClient, marketdata::*, symbology::*,
 };
 use futures::{select_biased, FutureExt, StreamExt};

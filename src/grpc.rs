@@ -3,7 +3,7 @@
 #[cfg(feature = "grpc-tls")]
 use anyhow::Context;
 use anyhow::Result;
-use api::HumanDuration;
+use architect_api::HumanDuration;
 use clap::Args;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

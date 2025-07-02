@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use api::{
+use architect_api::{
     pool,
     utils::{pool::Pooled, sequence::SequenceIdAndNumber},
     Dir, DirPair,
@@ -158,10 +158,10 @@ impl LevelBook {
     pub fn to_l2_book_snapshot(
         &self,
         sequence: SequenceIdAndNumber,
-    ) -> api::marketdata::L2BookSnapshot {
+    ) -> architect_api::marketdata::L2BookSnapshot {
         let bids = self.iter_levels(Dir::Buy).map(|(p, q)| (*p, *q)).collect::<Vec<_>>();
         let asks = self.iter_levels(Dir::Sell).map(|(p, q)| (*p, *q)).collect::<Vec<_>>();
-        api::marketdata::L2BookSnapshot {
+        architect_api::marketdata::L2BookSnapshot {
             timestamp: self.timestamp.timestamp(),
             timestamp_ns: self.timestamp.timestamp_subsec_nanos(),
             sequence,
@@ -171,7 +171,7 @@ impl LevelBook {
     }
 
     pub fn of_l2_book_snapshot(
-        snapshot: api::marketdata::L2BookSnapshot,
+        snapshot: architect_api::marketdata::L2BookSnapshot,
     ) -> Result<Self> {
         let timestamp =
             snapshot.timestamp().ok_or(anyhow!("BUG: Snapshot timestamp is invalid"))?;

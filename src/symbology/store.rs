@@ -1,6 +1,6 @@
 use crate::grpc::GrpcClientConfig;
 use anyhow::{bail, Result};
-use api::{
+use architect_api::{
     grpc::service::symbology_client::SymbologyClient as SymbologyGrpcClient,
     symbology::{
         protocol::*, ExecutionInfo, ExecutionVenue, ProductCatalogInfo, TradableProduct,

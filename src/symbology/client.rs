@@ -4,7 +4,7 @@ use crate::{
     synced::{Synced, SyncedHandle},
 };
 use anyhow::{bail, Result};
-use api::{
+use architect_api::{
     grpc::service::symbology_client::SymbologyClient as SymbologyGrpcClient,
     symbology::protocol::{SubscribeSymbology, SymbologyUpdate},
     utils::sequence::SequenceIdAndNumber,
