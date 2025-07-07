@@ -575,6 +575,9 @@ impl Architect {
             trader,
             symbol: symbol.map(|s| s.as_ref().to_string()),
             parent_order_id,
+            from_inclusive: None,
+            to_exclusive: None,
+            limit: None,
         };
         let req = self.with_jwt(req).await?;
         let res = client.open_orders(req).await?;
