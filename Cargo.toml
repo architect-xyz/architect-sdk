@@ -8,7 +8,7 @@ homepage = "https://www.architect.xyz"
 keywords = ["crypto", "hft", "trading", "finance"]
 license = "AGPL-3.0-only"
 name = "architect-sdk"
-version = "10.39.0"
+version = "10.40.0"
 
 # [[example]]
 # name = "subscribe_candles"
@@ -36,7 +36,7 @@ yaml = ["serde_yaml"]
 [dependencies]
 anyhow = { workspace = true }
 arc-swap = { workspace = true }
-architect-api = { package = "architect-api", version = "10.39.0", path = "../api" }
+architect-api = { package = "architect-api", version = "10.40.0", path = "../api" }
 arcstr = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
