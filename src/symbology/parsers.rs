@@ -21,6 +21,7 @@ pub struct UsEquityOptionsParts {
     // 18-20: strike price (decimal part), right zero padded
     pub osi_symbol: String,
     pub underlying_symbol: String,
+    pub wrap: String,
     pub expiration: NaiveDate,
     pub strike_price: Decimal,
     pub put_or_call: PutOrCall,
@@ -39,7 +40,8 @@ impl UsEquityOptionsParts {
         if parts.len() != 6 {
             bail!("Expected 6 parts, got {} for symbol {}", parts.len(), base);
         }
-        let underlying_symbol = parts[0].replace("-", ".");
+        let wrap = parts[0].replace("-", ".");
+        let underlying_symbol = wrap.trim_start_matches(char::is_numeric).to_string();
         let expiration = NaiveDate::parse_from_str(&parts[2], "%Y%m%d")?;
         let strike_price = Decimal::from_str(&parts[3])?;
         let put_or_call_char = parts[4];
@@ -48,16 +50,13 @@ impl UsEquityOptionsParts {
             "P" => PutOrCall::Put,
             _ => bail!("Expected C or P, got {} for symbol {}", put_or_call_char, base),
         };
-        let osi_symbol = Self::form_osi_symbol(
-            &underlying_symbol,
-            expiration,
-            strike_price,
-            put_or_call,
-        )?;
+        let osi_symbol =
+            Self::form_osi_symbol(&wrap, expiration, strike_price, put_or_call)?;
         Ok(Some(Self {
             tradable_product: tradable_product.clone(),
             osi_symbol,
             underlying_symbol,
+            wrap,
             expiration,
             strike_price,
             put_or_call,
@@ -69,7 +68,8 @@ impl UsEquityOptionsParts {
             bail!("OSI symbol must be 21 characters, got {}", osi_symbol.len());
         }
 
-        let underlying_symbol = osi_symbol[0..6].trim_end().to_string();
+        let wrap = osi_symbol[0..6].trim_end().to_string();
+        let underlying_symbol = wrap.trim_start_matches(char::is_numeric).to_string();
         let year = format!("20{}", &osi_symbol[6..8]);
         let month = &osi_symbol[8..10];
         let day = &osi_symbol[10..12];
@@ -93,7 +93,7 @@ impl UsEquityOptionsParts {
 
         let tradable_product = TradableProduct::from_str(&format!(
             "{} US {} {} {} Option/USD",
-            underlying_symbol.replace(".", "-"),
+            wrap.replace(".", "-"),
             expiration.format("%Y%m%d"),
             format!("{:.2}", strike_price),
             put_or_call
@@ -103,6 +103,7 @@ impl UsEquityOptionsParts {
             tradable_product,
             osi_symbol: osi_symbol.to_string(),
             underlying_symbol,
+            wrap,
             expiration,
             strike_price,
             put_or_call,
@@ -111,27 +112,25 @@ impl UsEquityOptionsParts {
 
     pub fn from_parts(
         underlying_symbol: &str,
+        wrap: &str,
         expiration: NaiveDate,
         strike_price: Decimal,
         put_or_call: PutOrCall,
     ) -> Result<Self> {
         let tradable_product = TradableProduct::from_str(&format!(
             "{} US {} {} {} Option/USD",
-            underlying_symbol.replace(".", "-"),
+            wrap.replace(".", "-"),
             expiration.format("%Y%m%d"),
             format!("{:.2}", strike_price),
             put_or_call
         ))?;
-        let osi_symbol = Self::form_osi_symbol(
-            underlying_symbol,
-            expiration,
-            strike_price,
-            put_or_call,
-        )?;
+        let osi_symbol =
+            Self::form_osi_symbol(wrap, expiration, strike_price, put_or_call)?;
         Ok(Self {
             tradable_product,
             osi_symbol,
             underlying_symbol: underlying_symbol.to_string(),
+            wrap: wrap.to_string(),
             expiration,
             strike_price,
             put_or_call,
