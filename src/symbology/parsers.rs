@@ -41,7 +41,7 @@ impl UsEquityOptionsParts {
             bail!("Expected 6 parts, got {} for symbol {}", parts.len(), base);
         }
         let wrap = parts[0].replace("-", ".");
-        let underlying_symbol = wrap.trim_start_matches(char::is_numeric).to_string();
+        let underlying_symbol = wrap.trim_end_matches(char::is_numeric).to_string();
         let expiration = NaiveDate::parse_from_str(&parts[2], "%Y%m%d")?;
         let strike_price = Decimal::from_str(&parts[3])?;
         let put_or_call_char = parts[4];
@@ -69,7 +69,7 @@ impl UsEquityOptionsParts {
         }
 
         let wrap = osi_symbol[0..6].trim_end().to_string();
-        let underlying_symbol = wrap.trim_start_matches(char::is_numeric).to_string();
+        let underlying_symbol = wrap.trim_end_matches(char::is_numeric).to_string();
         let year = format!("20{}", &osi_symbol[6..8]);
         let month = &osi_symbol[8..10];
         let day = &osi_symbol[10..12];
