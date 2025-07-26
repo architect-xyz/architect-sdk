@@ -36,6 +36,7 @@ use tonic::{
 };
 
 const ARCHITECT_CA: &[u8] = include_bytes!("ca.crt");
+const PAPER_GRPC_PORT: u16 = 10081;
 
 // convenience re-exports
 pub use architect_api::{
@@ -53,6 +54,7 @@ pub struct Architect {
     ca: Arc<Certificate>,
     api_key: ArcStr,
     api_secret: ArcStr,
+    paper_trading: bool,
     jwt: Arc<ArcSwapOption<(ArcStr, DateTime<Utc>)>>,
 }
 
@@ -60,18 +62,25 @@ impl Architect {
     pub async fn connect(
         api_key: impl AsRef<str>,
         api_secret: impl AsRef<str>,
+        paper_trading: bool,
     ) -> Result<Self> {
-        Self::connect_to("app.architect.co", api_key, api_secret).await
+        Self::connect_to("app.architect.co", api_key, api_secret, paper_trading).await
     }
 
     pub async fn connect_to(
         endpoint: impl AsRef<str>,
         api_key: impl AsRef<str>,
         api_secret: impl AsRef<str>,
+        paper_trading: bool,
     ) -> Result<Self> {
-        let endpoint = Self::resolve_endpoint(endpoint).await?;
+        if paper_trading {
+            println!("🧻 \x1b[30;43m YOU ARE IN PAPER TRADING MODE \x1b[0m");
+        }
+
+        let endpoint = Self::resolve_endpoint(endpoint, paper_trading).await?;
         let hmart_endpoint =
-            Self::resolve_endpoint("https://historical.marketdata.architect.co").await?;
+            Self::resolve_endpoint("https://historical.marketdata.architect.co", false)
+                .await?;
         let core = endpoint.connect().await?;
         let marketdata = Arc::new(RwLock::new(HashMap::new()));
         let hmart = hmart_endpoint.connect_lazy();
@@ -83,6 +92,7 @@ impl Architect {
             ca: Arc::new(Certificate::from_pem(ARCHITECT_CA)),
             api_key: ArcStr::from(api_key.as_ref()),
             api_secret: ArcStr::from(api_secret.as_ref()),
+            paper_trading,
             jwt: Arc::new(ArcSwapOption::empty()),
         };
         t.refresh_jwt(false).await?;
@@ -97,7 +107,13 @@ impl Architect {
     /// If a domain name is given, it will be resolved to an IP address and
     /// port using SRV records.  If a port is specified in `url`, it always
     /// takes precedence over the port found in SRV records.
-    pub async fn resolve_endpoint(endpoint: impl AsRef<str>) -> Result<Endpoint> {
+    ///
+    /// If paper_trading is true and the host is app.architect.co or staging.architect.co,
+    /// the port will be overridden to PAPER_GRPC_PORT.
+    pub async fn resolve_endpoint(
+        endpoint: impl AsRef<str>,
+        paper_trading: bool,
+    ) -> Result<Endpoint> {
         let uri: Uri = endpoint.as_ref().parse()?;
         let host = uri
             .host()
@@ -118,7 +134,15 @@ impl Architect {
                     .next()
                     .ok_or_else(|| anyhow!("no SRV records found for host: {host}"))?;
                 let target = rec.target();
-                let port = rec.port();
+                let mut port = rec.port();
+                if paper_trading {
+                    let target_str = target.to_string();
+                    if target_str.contains("app.architect.co")
+                        || target_str.contains("staging.architect.co")
+                    {
+                        port = PAPER_GRPC_PORT;
+                    }
+                }
                 format!("{scheme}://{target}:{port}")
             }
         };
@@ -190,14 +214,14 @@ impl Architect {
         let config = res.into_inner();
         if let Some(symbology) = config.symbology {
             info!("setting symbology endpoint: {}", symbology);
-            let endpoint = Self::resolve_endpoint(symbology).await?;
+            let endpoint = Self::resolve_endpoint(symbology, false).await?;
             let channel = endpoint.connect_lazy();
             let mut symbology = self.symbology.write();
             *symbology = Some(channel);
         }
         for (venue, endpoint) in config.marketdata {
             info!("setting marketdata endpoint for {venue}: {endpoint}");
-            let endpoint = Self::resolve_endpoint(endpoint).await?;
+            let endpoint = Self::resolve_endpoint(endpoint, false).await?;
             let channel = endpoint.connect_lazy();
             let mut marketdata = self.marketdata.write();
             marketdata.insert(venue, channel);
@@ -216,7 +240,7 @@ impl Architect {
 
     /// Manually set the symbology endpoint.
     pub async fn set_symbology(&self, endpoint: impl AsRef<str>) -> Result<()> {
-        let endpoint = Self::resolve_endpoint(endpoint).await?;
+        let endpoint = Self::resolve_endpoint(endpoint, false).await?;
         info!("setting symbology endpoint: {}", endpoint.uri());
         let channel = endpoint.connect_lazy();
         let mut symbology = self.symbology.write();
@@ -230,7 +254,7 @@ impl Architect {
         venue: MarketdataVenue,
         endpoint: impl AsRef<str>,
     ) -> Result<()> {
-        let endpoint = Self::resolve_endpoint(endpoint).await?;
+        let endpoint = Self::resolve_endpoint(endpoint, false).await?;
         info!("setting marketdata endpoint for {venue}: {}", endpoint.uri());
         let channel = endpoint.connect_lazy();
         let mut marketdata = self.marketdata.write();
@@ -251,7 +275,7 @@ impl Architect {
 
     /// Manually set the hmart (historical marketdata service) endpoint.
     pub async fn set_hmart(&mut self, endpoint: impl AsRef<str>) -> Result<()> {
-        let endpoint = Self::resolve_endpoint(endpoint).await?;
+        let endpoint = Self::resolve_endpoint(endpoint, false).await?;
         info!("setting hmart endpoint: {}", endpoint.uri());
         self.hmart = endpoint.connect_lazy();
         Ok(())
@@ -499,11 +523,10 @@ impl Architect {
 
     pub async fn list_accounts(
         &self,
-        paper: bool,
         trader: Option<TraderIdOrEmail>,
     ) -> Result<Vec<AccountWithPermissions>> {
         let mut client = AccountsClient::new(self.core.clone());
-        let req = AccountsRequest { paper, trader };
+        let req = AccountsRequest { paper: self.paper_trading, trader };
         let req = self.with_jwt(req).await?;
         let res = client.accounts(req).await?;
         Ok(res.into_inner().accounts)
@@ -641,9 +664,9 @@ mod tests {
     /// Test deterministic endpoint resolution
     #[tokio::test]
     async fn test_resolve_endpoint() -> Result<()> {
-        let e = Architect::resolve_endpoint("127.0.0.1:8081").await?;
+        let e = Architect::resolve_endpoint("127.0.0.1:8081", false).await?;
         assert_eq!(e.uri().to_string(), "http://127.0.0.1:8081/");
-        let e = Architect::resolve_endpoint("https://localhost:8081").await?;
+        let e = Architect::resolve_endpoint("https://localhost:8081", false).await?;
         assert_eq!(e.uri().to_string(), "https://localhost:8081/");
         Ok(())
     }
