@@ -649,6 +649,29 @@ impl Architect {
         let res = client.cancel_order(req).await?;
         Ok(res.into_inner())
     }
+
+    /// Get execution information for a tradable product at a specific venue.
+    ///
+    /// Returns execution details like tick size, step size, minimum order quantity,
+    /// margin requirements, and other venue-specific trading parameters.
+    ///
+    /// The symbol must be a TradableProduct (e.g., "ES 20250620 CME Future/USD").
+    /// Note that this symbol has the format {base}/{quote}, where the quote will generally be USD.
+    pub async fn get_execution_info(
+        &self,
+        symbol: impl AsRef<str>,
+        execution_venue: Option<ExecutionVenue>,
+    ) -> Result<ExecutionInfoResponse> {
+        let symbol = symbol.as_ref();
+
+        let channel = self.core.clone();
+        let mut client = SymbologyClient::new(channel);
+
+        let req = ExecutionInfoRequest { symbol: symbol.to_string(), execution_venue };
+        let req = self.with_jwt(req).await?;
+        let res = client.execution_info(req).await?;
+        Ok(res.into_inner())
+    }
 }
 
 #[derive(Default, Debug, Clone)]
