@@ -78,6 +78,7 @@ impl Architect {
         }
 
         let endpoint = Self::resolve_endpoint(endpoint, paper_trading).await?;
+        debug!("connecting to endpoint: {}", endpoint.uri());
         let hmart_endpoint =
             Self::resolve_endpoint("https://historical.marketdata.architect.co", false)
                 .await?;
@@ -229,7 +230,7 @@ impl Architect {
         Ok(())
     }
 
-    fn symbology(&self) -> Result<Channel> {
+    fn _symbology(&self) -> Result<Channel> {
         let symbology = self.symbology.read();
         if let Some(channel) = &*symbology {
             Ok(channel.clone())
@@ -303,8 +304,7 @@ impl Architect {
         series_symbol: impl AsRef<str>,
         include_expired: bool,
     ) -> Result<Vec<Product>> {
-        let channel = self.symbology()?;
-        let mut client = SymbologyClient::new(channel);
+        let mut client = SymbologyClient::new(self.core.clone());
         let req = FuturesSeriesRequest {
             series_symbol: series_symbol.as_ref().to_string(),
             include_expired,

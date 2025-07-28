@@ -61,9 +61,10 @@ tonic = { workspace = true, optional = true }
 url = { workspace = true }
 uuid = { workspace = true }
 
-# [dev-dependencies]
+[dev-dependencies]
 # env_logger = { workspace = true }
 # inquire = { workspace = true }
+dotenvy = "0.15"
 
 [package.metadata.cargo-machete]
 ignored = [
