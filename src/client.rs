@@ -13,7 +13,7 @@ use architect_api::{
     folio::*,
     grpc::service::{
         accounts_client::*, auth_client::*, core_client::*, folio_client::*,
-        marketdata_client::*, oms_client::*, symbology_client::*,
+        marketdata_client::*, oms_client::*, orderflow_client::*, symbology_client::*,
     },
     marketdata::{CandleWidth, *},
     oms::*,
@@ -59,6 +59,10 @@ pub struct Architect {
 }
 
 impl Architect {
+    // ------------------------------------------------------------
+    // Initialization and configuration
+    // ------------------------------------------------------------
+
     pub async fn connect(
         api_key: impl AsRef<str>,
         api_secret: impl AsRef<str>,
@@ -282,6 +286,10 @@ impl Architect {
         Ok(())
     }
 
+    // ------------------------------------------------------------
+    // Symbology
+    // ------------------------------------------------------------
+
     /// List all symbols.
     ///
     /// If marketdata is specified, query the marketdata endpoint directly;
@@ -313,6 +321,33 @@ impl Architect {
         let res = client.futures_series(req).await?;
         Ok(res.into_inner().futures)
     }
+
+    /// Get execution information for a tradable product at a specific venue.
+    ///
+    /// Returns execution details like tick size, step size, minimum order quantity,
+    /// margin requirements, and other venue-specific trading parameters.
+    ///
+    /// The symbol must be a TradableProduct (e.g., "ES 20250620 CME Future/USD").
+    /// Note that this symbol has the format {base}/{quote}, where the quote will generally be USD.
+    pub async fn get_execution_info(
+        &self,
+        symbol: impl AsRef<str>,
+        execution_venue: Option<ExecutionVenue>,
+    ) -> Result<ExecutionInfoResponse> {
+        let symbol = symbol.as_ref();
+
+        let channel = self.core.clone();
+        let mut client = SymbologyClient::new(channel);
+
+        let req = ExecutionInfoRequest { symbol: symbol.to_string(), execution_venue };
+        let req = self.with_jwt(req).await?;
+        let res = client.execution_info(req).await?;
+        Ok(res.into_inner())
+    }
+
+    // ------------------------------------------------------------
+    // Marketdata
+    // ------------------------------------------------------------
 
     pub async fn get_market_status(
         &self,
@@ -521,6 +556,10 @@ impl Architect {
         Ok(res.into_inner())
     }
 
+    // ------------------------------------------------------------
+    // Portfolio management
+    // ------------------------------------------------------------
+
     pub async fn list_accounts(
         &self,
         trader: Option<TraderIdOrEmail>,
@@ -581,6 +620,10 @@ impl Architect {
         Ok(res.into_inner().history)
     }
 
+    // ------------------------------------------------------------
+    // Order management
+    // ------------------------------------------------------------
+
     pub async fn get_open_orders(
         &self,
         order_ids: Option<impl IntoIterator<Item = &OrderId>>,
@@ -636,6 +679,73 @@ impl Architect {
         Ok(res.into_inner().fills)
     }
 
+    /// Create a bidirectional orderflow stream.
+    ///
+    /// This returns the raw bidirectional stream from the gRPC service.
+    /// You can send `OrderflowRequest` messages and receive `Orderflow` updates.
+    ///
+    /// For most use cases, consider using `place_order` and `cancel_order` methods
+    /// directly on the client instead.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use architect_sdk::Architect;
+    /// # use architect_api::orderflow::{OrderflowRequest, Orderflow, OrderType};
+    /// # use architect_api::oms::PlaceOrderRequest;
+    /// # use architect_api::Dir;
+    /// # #[tokio::main]
+    /// # async fn main() -> anyhow::Result<()> {
+    /// # let client = Architect::connect("key", "secret", true).await?;
+    /// use tokio_stream::StreamExt;
+    ///
+    /// let (tx, rx) = tokio::sync::mpsc::channel(100);
+    /// let request_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    /// let mut response_stream = client.orderflow(request_stream).await?;
+    ///
+    /// // Send orders through tx
+    /// let order = PlaceOrderRequest {
+    ///     id: None,
+    ///     parent_id: None,
+    ///     symbol: "BTC-USD".to_string(),
+    ///     dir: Dir::Buy,
+    ///     quantity: "0.01".parse()?,
+    ///     trader: None,
+    ///     account: None,
+    ///     order_type: OrderType::Market,
+    ///     time_in_force: architect_api::orderflow::TimeInForce::GoodTilCancel,
+    ///     source: None,
+    ///     execution_venue: None,
+    /// };
+    /// tx.send(OrderflowRequest::PlaceOrder(order)).await?;
+    ///
+    /// // Receive updates
+    /// while let Some(result) = response_stream.next().await {
+    ///     match result {
+    ///         Ok(update) => println!("Update: {:?}", update),
+    ///         Err(e) => eprintln!("Error: {}", e),
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn orderflow<S>(
+        &self,
+        request_stream: S,
+    ) -> Result<tonic::codec::Streaming<Orderflow>>
+    where
+        S: futures::Stream<Item = OrderflowRequest> + Send + 'static,
+    {
+        let mut client = OrderflowClient::new(self.core.clone());
+        let req = self.with_jwt(request_stream).await?;
+        let res = client.orderflow(req).await?;
+        Ok(res.into_inner())
+    }
+
+    // ------------------------------------------------------------
+    // Order entry
+    // ------------------------------------------------------------
+
     pub async fn place_order(&self, place_order: PlaceOrderRequest) -> Result<Order> {
         let mut client = OmsClient::new(self.core.clone());
         let req = self.with_jwt(place_order).await?;
@@ -647,29 +757,6 @@ impl Architect {
         let mut client = OmsClient::new(self.core.clone());
         let req = self.with_jwt(cancel_order).await?;
         let res = client.cancel_order(req).await?;
-        Ok(res.into_inner())
-    }
-
-    /// Get execution information for a tradable product at a specific venue.
-    ///
-    /// Returns execution details like tick size, step size, minimum order quantity,
-    /// margin requirements, and other venue-specific trading parameters.
-    ///
-    /// The symbol must be a TradableProduct (e.g., "ES 20250620 CME Future/USD").
-    /// Note that this symbol has the format {base}/{quote}, where the quote will generally be USD.
-    pub async fn get_execution_info(
-        &self,
-        symbol: impl AsRef<str>,
-        execution_venue: Option<ExecutionVenue>,
-    ) -> Result<ExecutionInfoResponse> {
-        let symbol = symbol.as_ref();
-
-        let channel = self.core.clone();
-        let mut client = SymbologyClient::new(channel);
-
-        let req = ExecutionInfoRequest { symbol: symbol.to_string(), execution_venue };
-        let req = self.with_jwt(req).await?;
-        let res = client.execution_info(req).await?;
         Ok(res.into_inner())
     }
 }
