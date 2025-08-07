@@ -7,8 +7,8 @@ use std::str::FromStr;
 #[derive(Debug)]
 pub struct UsEquityOptionsParts {
     // Architect Tradable Prodcut format:
-    // e.g. AAPL US 20260918 220.50 C Option/USD
-    // {underlying} US {exp YYYYMMDD} {strike, two decimals} {C|P} Option/USD
+    // e.g. AAPL  260918C00220500 Option/USD
+    // {osi_symbol} Option/USD
     pub tradable_product: TradableProduct,
     // OSI 21-byte format:
     // SSSSSSYYMMDDOPPPPPppp
@@ -28,39 +28,23 @@ pub struct UsEquityOptionsParts {
 }
 
 impl UsEquityOptionsParts {
-    // Expceted base product format: AAPL US 20260918 220.50 C Option
+    // Expceted base product format: {osi_symbol} Option
     pub fn parse_tradable_product(
         tradable_product: &TradableProduct,
     ) -> Result<Option<Self>> {
         let base = tradable_product.base().to_string();
-        if !(base.contains(" US ") && base.contains("Option")) {
+        if !(base.ends_with(" Option")) {
             return Ok(None);
         }
-        let parts = base.split(" ").collect::<Vec<&str>>();
-        if parts.len() != 6 {
-            bail!("Expected 6 parts, got {} for symbol {}", parts.len(), base);
+        let osi_symbol = base.trim_end_matches(" Option");
+        if osi_symbol.len() != 21 {
+            bail!(
+                "Expected 21 chars for OSI symbol format, got {} for {}",
+                osi_symbol.len(),
+                osi_symbol
+            );
         }
-        let wrap = parts[0].replace("-", ".");
-        let underlying_symbol = wrap.trim_end_matches(char::is_numeric).to_string();
-        let expiration = NaiveDate::parse_from_str(&parts[2], "%Y%m%d")?;
-        let strike_price = Decimal::from_str(&parts[3])?;
-        let put_or_call_char = parts[4];
-        let put_or_call = match put_or_call_char {
-            "C" => PutOrCall::Call,
-            "P" => PutOrCall::Put,
-            _ => bail!("Expected C or P, got {} for symbol {}", put_or_call_char, base),
-        };
-        let osi_symbol =
-            Self::form_osi_symbol(&wrap, expiration, strike_price, put_or_call)?;
-        Ok(Some(Self {
-            tradable_product: tradable_product.clone(),
-            osi_symbol,
-            underlying_symbol,
-            wrap,
-            expiration,
-            strike_price,
-            put_or_call,
-        }))
+        return Self::parse_osi_symbol(osi_symbol).map(|s| Some(s));
     }
 
     pub fn parse_osi_symbol(osi_symbol: &str) -> Result<Self> {
@@ -91,13 +75,9 @@ impl UsEquityOptionsParts {
         let strike_price =
             Decimal::from_str(&format!("{}.{}", strike_dollar, strike_decimal))?;
 
-        let tradable_product = TradableProduct::from_str(&format!(
-            "{} US {} {} {} Option/USD",
-            wrap.replace(".", "-"),
-            expiration.format("%Y%m%d"),
-            format!("{:.2}", strike_price),
-            put_or_call
-        ))?;
+        let tradable_product = TradableProduct::from_str(
+            &us_options_osi_symbol_to_tradable_product(osi_symbol),
+        )?;
 
         Ok(Self {
             tradable_product,
@@ -117,15 +97,11 @@ impl UsEquityOptionsParts {
         strike_price: Decimal,
         put_or_call: PutOrCall,
     ) -> Result<Self> {
-        let tradable_product = TradableProduct::from_str(&format!(
-            "{} US {} {} {} Option/USD",
-            wrap.replace(".", "-"),
-            expiration.format("%Y%m%d"),
-            format!("{:.2}", strike_price),
-            put_or_call
-        ))?;
         let osi_symbol =
             Self::form_osi_symbol(wrap, expiration, strike_price, put_or_call)?;
+        let tradable_product = TradableProduct::from_str(
+            &us_options_osi_symbol_to_tradable_product(&osi_symbol),
+        )?;
         Ok(Self {
             tradable_product,
             osi_symbol,
@@ -170,7 +146,7 @@ mod tests {
     #[test]
     fn test_parse_option() -> Result<()> {
         let tradable_product =
-            TradableProduct::from_str("AAPL US 20260918 220.50 C Option/USD")?;
+            TradableProduct::from_str("AAPL  260918C00220500 Option/USD")?;
         let symbology =
             UsEquityOptionsParts::parse_tradable_product(&tradable_product)?.unwrap();
         assert_eq!(symbology.osi_symbol, "AAPL  260918C00220500");
@@ -184,6 +160,10 @@ mod tests {
     #[test]
     fn test_parse_osi_symbol() -> Result<()> {
         let symbology = UsEquityOptionsParts::parse_osi_symbol("AAPL  260918C00220500")?;
+        assert_eq!(
+            symbology.tradable_product,
+            TradableProduct::from_str("AAPL  260918C00220500 Option/USD")?
+        );
         assert_eq!(symbology.osi_symbol, "AAPL  260918C00220500");
         assert_eq!(symbology.underlying_symbol, "AAPL");
         assert_eq!(symbology.expiration, NaiveDate::from_ymd_opt(2026, 9, 18).unwrap());
@@ -191,4 +171,8 @@ mod tests {
         assert_eq!(symbology.put_or_call, PutOrCall::Call);
         Ok(())
     }
+}
+
+pub fn us_options_osi_symbol_to_tradable_product(osi_symbol: &str) -> String {
+    return format!("{} Option/USD", osi_symbol);
 }
