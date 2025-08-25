@@ -375,11 +375,18 @@ impl Architect {
     ) -> Result<Vec<Candle>> {
         let symbol = symbol.as_ref();
         let venue = venue.as_ref();
-        let channel = self.hmart.clone();
+        // Special handling for US-EQUITIES: route to marketdata channel instead of hmart
+        // if this branch is changed, fix the graphql query and python sdk function as well
+        let (channel, venue_param) = if venue == "US-EQUITIES" {
+            (self.marketdata(venue)?, None)
+        } else {
+            (self.hmart.clone(), Some(venue.into()))
+        };
+
         let mut client = MarketdataClient::new(channel);
         let req = HistoricalCandlesRequest {
             symbol: symbol.to_string(),
-            venue: Some(venue.into()),
+            venue: venue_param,
             candle_width,
             start_date,
             end_date,
