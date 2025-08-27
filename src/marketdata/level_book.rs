@@ -108,7 +108,7 @@ impl LevelBook {
 
     /// return an iterator traversing the levels in best price order
     /// for a given direction
-    pub fn iter_levels(&self, dir: Dir) -> LevelIterator {
+    pub fn iter_levels(&self, dir: Dir) -> LevelIterator<'_> {
         match dir {
             Dir::Buy => LevelIterator::Reverse(self.buy.iter().rev()),
             Dir::Sell => LevelIterator::Forward(self.sell.iter()),

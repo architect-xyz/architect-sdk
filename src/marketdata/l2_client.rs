@@ -147,7 +147,7 @@ impl L2Client {
         self.state.lock().sequence
     }
 
-    pub fn book(&self) -> MappedMutexGuard<LevelBook> {
+    pub fn book(&self) -> MappedMutexGuard<'_, LevelBook> {
         let guard = self.state.lock();
         MutexGuard::map(guard, |state| &mut state.book)
     }
@@ -197,7 +197,7 @@ impl L2ClientHandle {
         }
     }
 
-    pub fn book(&self) -> Option<MappedMutexGuard<LevelBook>> {
+    pub fn book(&self) -> Option<MappedMutexGuard<'_, LevelBook>> {
         if self.is_ready() && self.is_alive() {
             let guard = self.state.lock();
             Some(MutexGuard::map(guard, |state| &mut state.book))
