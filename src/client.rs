@@ -373,8 +373,21 @@ impl Architect {
         start_date: DateTime<Utc>,
         end_date: DateTime<Utc>,
     ) -> Result<Vec<Candle>> {
+        use crate::marketdata::synthetic_candles::{
+            synthesize_2m_candles, synthesize_3m_candles,
+        };
+
         let symbol = symbol.as_ref();
         let venue = venue.as_ref();
+
+        // For 2m/3m candles, fetch 1m candles and compose them client-side
+        let (actual_width, needs_composition) = match candle_width {
+            CandleWidth::TwoMinute | CandleWidth::ThreeMinute => {
+                (CandleWidth::OneMinute, true)
+            }
+            _ => (candle_width, false),
+        };
+
         // Special handling for US-EQUITIES: route to marketdata channel instead of hmart
         // if this branch is changed, fix the graphql query and python sdk function as well
         let (channel, venue_param) = if venue == "US-EQUITIES" {
@@ -387,13 +400,24 @@ impl Architect {
         let req = HistoricalCandlesRequest {
             symbol: symbol.to_string(),
             venue: venue_param,
-            candle_width,
+            candle_width: actual_width,
             start_date,
             end_date,
         };
         let req = self.with_jwt(req).await?;
         let res = client.historical_candles(req).await?;
-        Ok(res.into_inner().candles)
+        let candles = res.into_inner().candles;
+
+        // Compose if needed
+        if needs_composition {
+            match candle_width {
+                CandleWidth::TwoMinute => Ok(synthesize_2m_candles(candles)),
+                CandleWidth::ThreeMinute => Ok(synthesize_3m_candles(candles)),
+                _ => unreachable!(),
+            }
+        } else {
+            Ok(candles)
+        }
     }
 
     pub async fn get_l1_book_snapshot(

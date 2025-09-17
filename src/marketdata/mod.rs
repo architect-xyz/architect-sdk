@@ -6,6 +6,7 @@ pub mod l2_client;
 pub mod level_book;
 #[cfg(feature = "grpc")]
 pub mod managed_l1_streams;
+pub mod synthetic_candles;
 
 pub use level_book::{LevelBook, LevelLike};
 
