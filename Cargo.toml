@@ -32,6 +32,7 @@ grpc = ["architect-api/grpc", "hickory-resolver", "tonic"]
 grpc-tls = ["tonic/tls-aws-lc", "tonic/tls-native-roots"]
 # enable this feature to access sdk::load_config
 yaml = ["serde_yaml"]
+docs-rs = ["architect-api/docs-rs"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -65,6 +66,9 @@ uuid = { workspace = true }
 # env_logger = { workspace = true }
 # inquire = { workspace = true }
 dotenvy = "0.15"
+
+[package.metadata.docs.rs]
+features = ["docs-rs"]
 
 [package.metadata.cargo-machete]
 ignored = [
